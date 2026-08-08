@@ -1,0 +1,29 @@
+{
+  "name": "blog-part2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "content:build": "node scripts/build-content.mjs",
+    "dev": "npm run content:build && wrangler dev",
+    "deploy": "npm run content:build && wrangler deploy",
+    "test": "npm run content:build && vitest run",
+    "test:watch": "npm run content:build && vitest",
+    "typecheck": "npm run content:build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
+    "db:apply:local": "wrangler d1 execute blog-part2-db --local --file=./src/db/schema.sql",
+    "db:apply:remote": "wrangler d1 execute blog-part2-db --remote --file=./src/db/schema.sql",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "hono": "^4.13.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.20.3",
+    "@types/node": "^26.2.0",
+    "gray-matter": "^4.0.3",
+    "marked": "^18.0.9",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.120.0"
+  }
+}

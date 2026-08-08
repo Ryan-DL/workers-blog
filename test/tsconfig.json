@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // The `cloudflare:test` module (SELF, env) is pulled in by env.d.ts.
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts", "../worker-configuration.d.ts", "../src/sql.d.ts"]
+}
