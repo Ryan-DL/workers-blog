@@ -1,7 +1,56 @@
 # blog-part2
 
-A blog backend on Cloudflare Workers. Content is Markdown files in this repo;
-D1 holds the mutable state (view counts). No front end yet — this is a JSON API.
+A blog on Cloudflare Workers. Content is Markdown files in this repo; D1 holds
+the mutable state (view counts). The site is server-rendered by the Worker, and
+the same Worker exposes a JSON API with an OpenAPI spec.
+
+## Make it yours
+
+Everything that isn't a post lives in **`blog.config.ts`** at the repo root —
+title, description, author, about-page copy, socials, and navigation. It's the
+only file you need to edit.
+
+```ts
+export default {
+  title: "blog-part2",
+  description: "A blog on Cloudflare Workers",
+  url: "",              // empty = derive from the request. See below.
+  author: { name, tagline, bio: ["…"], avatar, avatarAlt },
+  socials: {
+    github: "Ryan-Dl",  // a bare handle…
+    x: "",              // …or "" to leave it out entirely
+    email: "",
+  },
+  nav: [{ label: "Writing", href: "/" }],
+} satisfies BlogConfig;
+```
+
+**Socials take a handle or a full URL**, whichever you have. `github: "octocat"`
+becomes `https://github.com/octocat`; `github: "https://git.internal/me"` is used
+as-is. Mastodon handles split across their instance, and a leading `@` is fine
+anywhere.
+
+**Anything blank is omitted.** An empty string, whitespace, or a deleted line
+means that icon never renders — so a half-filled config produces a clean footer
+rather than links to profiles that don't exist. Blank the lot and the footer
+renders nothing at all. Set `showRssLink: false` to drop the feed icon too.
+
+Supported out of the box: `github`, `x`, `bluesky`, `mastodon`, `linkedin`,
+`youtube`, `email`, `website`. For anything else, use `extraSocials`:
+
+```ts
+extraSocials: [{ label: "Ko-fi", href: "https://ko-fi.com/you" }],
+```
+
+`npm run typecheck` catches a mistyped key.
+
+### About the `url` field
+
+Leave it empty and every absolute URL — canonical tags, the RSS feed, the
+sitemap, the OpenAPI server — is derived from the host serving the request. That
+is correct on `localhost`, on `*.workers.dev`, and on your real domain, with
+nothing to remember to change before deploying. Set it only to pin one canonical
+origin when the site answers on several hostnames.
 
 ## The model
 
@@ -41,10 +90,10 @@ crawlers and shared caches away, but it is not access control. Don't put
 anything sensitive in one. (If you later want real protection, a token check on
 the detail route is the place to add it.)
 
-Since `status` comes back on every entry, the front end can render a
-"Preview — not published" banner by checking one field. It should also emit
-`<meta name="robots" content="noindex">` on preview pages, since the header on
-the API response doesn't cover the HTML page built from it.
+`status` comes back on every entry, and the site uses it: a preview page renders
+a "Preview" banner, carries `<meta name="robots" content="noindex, nofollow">`,
+and is excluded from view counting so a post doesn't launch with numbers from
+you and your reviewers reloading it.
 
 ## Where data lives
 
@@ -125,7 +174,7 @@ Everything returns `entries` — a mixed list unless you narrow it by kind.
 
 | Method | Route | Notes |
 | --- | --- | --- |
-| GET | `/` | Endpoint index |
+| GET | `/api` | Endpoint index |
 | GET | `/api/health` | `{ ok, entries, posts, links, byStatus, timestamp }` |
 | GET | `/api/entries` | The timeline. `?kind=&tag=&q=&limit=&offset=&views=` |
 | GET | `/api/posts` | Alias for `?kind=post` |
@@ -138,6 +187,7 @@ Everything returns `entries` — a mixed list unless you narrow it by kind.
 | GET | `/api/popular` | Most-viewed posts; `?limit=` |
 | GET | `/feed.xml` | RSS 2.0 over the whole timeline |
 | GET | `/sitemap.xml` | Hosted posts only |
+| GET | `/openapi.json` | OpenAPI 3.1 document; rendered at `/docs` |
 
 Behaviour worth knowing:
 
@@ -157,6 +207,38 @@ Behaviour worth knowing:
 - The sitemap lists only hosted posts — `renderSitemap` takes `Post[]`, not
   `Entry[]`, so including an external URL is a compile error.
 
+## The site
+
+Pages are server-rendered by the Worker — the entries are already compiled into
+the bundle, so rendering one is a lookup and a template. Nothing to fetch, no
+hydration, no loading state.
+
+| Route | |
+| --- | --- |
+| `/` | The timeline, posts and links together |
+| `/about` | Author, portrait, bio, socials |
+| `/posts/:slug` | A post, or a link with a callout to its source |
+| `/tags/:tag` | Everything under one tag |
+| `/docs` | Swagger UI over the API |
+
+### Theme
+
+Dark by default, with a toggle in the header. Precedence is: the visitor's
+stored choice, then `prefers-color-scheme`, then **dark**. The initial theme is
+resolved by a small inline script in `<head>` so there's no flash of the wrong
+palette before the page paints; `public/theme.js` only handles the toggle
+afterwards.
+
+One nuance worth knowing: browsers report `prefers-color-scheme: light` when the
+OS has no preference set at all, so "no configuration" is indistinguishable from
+"prefers light" in CSS. Dark is the fallback for every other path — no
+JavaScript, an unsupported browser, a thrown error. To make dark win even over
+an explicit light preference, drop the `@media (prefers-color-scheme: light)`
+block in `public/styles.css` and the `matchMedia` call in the bootstrap.
+
+Palette lives in `public/styles.css` as tokens on `:root` — dark values are the
+defaults, light is the override.
+
 ## Going live
 
 Deploying needs a Cloudflare account and a real D1 database:
@@ -171,31 +253,35 @@ npm run deploy
 `wrangler.jsonc` ships with `database_id` set to a placeholder. Local dev works
 without it; `deploy` will not.
 
-Also update `SITE_URL` in `wrangler.jsonc` before deploying — the RSS feed and
-sitemap build absolute URLs from it.
+Static files are served by Workers Static Assets from `public/` — the same
+Worker serves the site, the assets, and the API, so there's one deploy, one
+domain, and no CORS between the front end and the API.
 
 ## Layout
 
 ```
+blog.config.ts            everything about the site that isn't a post
 content/posts/*.md        posts hosted here
 content/links/*.md        links to posts published elsewhere
 scripts/build-content.mjs build-time Markdown -> src/generated/entries.ts
-src/index.ts              Hono app and routes
+src/index.ts              Hono app: pages, API, feeds
+src/config.ts             config types, social registry, resolution
 src/content.ts            queries over the compiled entries
 src/views.ts              D1 view counting
 src/feed.ts               RSS + sitemap
+src/openapi.ts            the OpenAPI document
+src/views/                HTML templates
 src/db/schema.sql         D1 schema
-test/api.spec.ts          integration tests against a real Worker + D1
+public/                   styles.css, theme.js, avatar.svg, favicon.svg
+test/                     integration tests against a real Worker + D1
 ```
 
 `src/generated/` is gitignored — it's wiped and rebuilt from the Markdown on
 every build.
 
-## Notes for the front end
-
-CORS on `/api/*` is currently `origin: "*"` so a separate dev server can call
-it. Narrow it before launch. When you add static files, uncomment the `assets`
-block in `wrangler.jsonc`.
+CORS on `/api/*` is `origin: "*"`, which only affects other people's clients
+reading your API — the site itself is same-origin. Narrow it if you'd rather
+nobody else consumed it.
 
 ## Commands
 

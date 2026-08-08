@@ -22,12 +22,14 @@
     }
   ],
 
-  "vars": {
-    "SITE_TITLE": "blog-part2",
-    "SITE_DESCRIPTION": "A blog on Cloudflare Workers",
-    "SITE_URL": "http://localhost:8787"
+  // CSS, JS, and images. A request matching a file here is served directly;
+  // everything else falls through to the Worker, which renders the HTML.
+  "assets": {
+    "directory": "./public"
   }
 
-  // Front end comes later. When you add static assets, uncomment:
-  // "assets": { "directory": "./public", "binding": "ASSETS" }
+  // Site title, description, socials, and the rest live in blog.config.ts —
+  // one file, typed, rather than split between here and the source. Absolute
+  // URLs are derived from the incoming request, so there is no hostname to
+  // remember to change before deploying.
 }

@@ -1,3 +1,4 @@
+import type { Site } from "./config";
 import type { Entry, Post } from "./types";
 
 function escapeXml(value: string): string {
@@ -17,14 +18,14 @@ function escapeXml(value: string): string {
  * that only says "go there". Its `guid` stays on this domain so the item keeps
  * a stable identity in readers even if the target URL changes.
  */
-export function renderRss(entries: readonly Entry[], env: Env): string {
-  const site = env.SITE_URL.replace(/\/$/, "");
+export function renderRss(entries: readonly Entry[], site: Site): string {
   const latest = entries[0]?.date ?? new Date(0).toISOString();
 
   const items = entries
     .map((entry) => {
-      const permalink = `${site}/posts/${entry.slug}`;
+      const permalink = `${site.url}/posts/${entry.slug}`;
       const target = entry.kind === "link" ? entry.url : permalink;
+      // `entry.site` is the external source; `site` is this blog.
       const title = entry.kind === "link" ? `${entry.title} (${entry.site})` : entry.title;
 
       // For a link, the body is commentary, so fall back to the excerpt when
@@ -46,12 +47,12 @@ ${entry.tags.map((t) => `      <category>${escapeXml(t)}</category>`).join("\n")
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>${escapeXml(env.SITE_TITLE)}</title>
-    <link>${escapeXml(site)}</link>
-    <description>${escapeXml(env.SITE_DESCRIPTION)}</description>
-    <language>en</language>
+    <title>${escapeXml(site.title)}</title>
+    <link>${escapeXml(site.url)}</link>
+    <description>${escapeXml(site.description)}</description>
+    <language>${escapeXml(site.language)}</language>
     <lastBuildDate>${new Date(latest).toUTCString()}</lastBuildDate>
-    <atom:link href="${escapeXml(`${site}/feed.xml`)}" rel="self" type="application/rss+xml" />
+    <atom:link href="${escapeXml(`${site.url}/feed.xml`)}" rel="self" type="application/rss+xml" />
 ${items}
   </channel>
 </rss>
@@ -63,12 +64,11 @@ ${items}
  * sitemap may only list URLs on this domain — the type makes that a compile
  * error rather than an SEO bug.
  */
-export function renderSitemap(posts: readonly Post[], env: Env): string {
-  const site = env.SITE_URL.replace(/\/$/, "");
+export function renderSitemap(posts: readonly Post[], site: Site): string {
   const urls = posts
     .map(
       (post) => `  <url>
-    <loc>${escapeXml(`${site}/posts/${post.slug}`)}</loc>
+    <loc>${escapeXml(`${site.url}/posts/${post.slug}`)}</loc>
     <lastmod>${(post.updated ?? post.date).slice(0, 10)}</lastmod>
   </url>`,
     )
@@ -77,7 +77,7 @@ export function renderSitemap(posts: readonly Post[], env: Env): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>${escapeXml(site)}</loc>
+    <loc>${escapeXml(site.url)}</loc>
   </url>
 ${urls}
 </urlset>

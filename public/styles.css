@@ -1,0 +1,667 @@
+/*
+ * Dark-first design tokens.
+ *
+ * :root carries the DARK palette, so dark is what you get by default — before
+ * JavaScript runs, and if it never runs at all. Light is applied only when
+ * something explicitly asks for it: the browser (via prefers-color-scheme, and
+ * only while no explicit choice is stored) or the user (via [data-theme]).
+ */
+
+:root {
+  --bg: #0c0f14;
+  --bg-elev: #131820;
+  --bg-sunken: #090b0f;
+  --text: #e8ecf1;
+  --text-dim: #96a1b0;
+  --text-faint: #6b7684;
+  --border: #1f2731;
+  --border-strong: #2c3744;
+  --accent: #6cc7f5;
+  --accent-quiet: #1a3a4d;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+/* No stored choice, and the browser asks for light. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #fdfdfc;
+    --bg-elev: #ffffff;
+    --bg-sunken: #f4f4f2;
+    --text: #16191d;
+    --text-dim: #56606c;
+    --text-faint: #858e99;
+    --border: #e4e4e0;
+    --border-strong: #d0d0ca;
+    --accent: #0b6c99;
+    --accent-quiet: #e2f1f9;
+    --shadow: 0 1px 2px rgb(16 20 26 / 0.05), 0 8px 24px -12px rgb(16 20 26 / 0.15);
+    color-scheme: light;
+  }
+}
+
+/* An explicit choice always wins, in both directions. */
+:root[data-theme="light"] {
+  --bg: #fdfdfc;
+  --bg-elev: #ffffff;
+  --bg-sunken: #f4f4f2;
+  --text: #16191d;
+  --text-dim: #56606c;
+  --text-faint: #858e99;
+  --border: #e4e4e0;
+  --border-strong: #d0d0ca;
+  --accent: #0b6c99;
+  --accent-quiet: #e2f1f9;
+  --shadow: 0 1px 2px rgb(16 20 26 / 0.05), 0 8px 24px -12px rgb(16 20 26 / 0.15);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0c0f14;
+  --bg-elev: #131820;
+  --bg-sunken: #090b0f;
+  --text: #e8ecf1;
+  --text-dim: #96a1b0;
+  --text-faint: #6b7684;
+  --border: #1f2731;
+  --border-strong: #2c3744;
+  --accent: #6cc7f5;
+  --accent-quiet: #1a3a4d;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --measure: 68ch;
+  --page: 46rem;
+  --radius: 10px;
+}
+
+/* --- Reset ---------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Only the palette animates on a theme flip — not layout, not transforms. */
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* --- Layout --------------------------------------------------------------- */
+
+.shell {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 10;
+  padding: 0.5rem 0.9rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.75rem 0 2.5rem;
+}
+
+.wordmark {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  text-decoration: none;
+  margin-right: auto;
+}
+
+.wordmark::before {
+  content: "▍";
+  color: var(--accent);
+  margin-right: 0.4rem;
+}
+
+.site-nav {
+  display: flex;
+  gap: 1.1rem;
+}
+
+.site-nav a {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.site-nav a:hover,
+.site-nav a[aria-current="page"] {
+  color: var(--text);
+}
+
+/* --- Theme toggle --------------------------------------------------------- */
+
+.theme-toggle {
+  --size: 2rem;
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.theme-toggle svg {
+  position: absolute;
+  width: 1.05rem;
+  height: 1.05rem;
+  /* Both icons are always in the DOM; the active theme decides which is
+     visible, so the swap is a transition rather than a re-render. */
+  transition: transform 0.4s cubic-bezier(0.5, 1.6, 0.4, 1), opacity 0.25s ease;
+}
+
+.theme-toggle .icon-sun {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.4);
+}
+
+.theme-toggle .icon-moon {
+  opacity: 1;
+  transform: rotate(0) scale(1);
+}
+
+:root[data-theme="light"] .theme-toggle .icon-sun {
+  opacity: 1;
+  transform: rotate(0) scale(1);
+}
+
+:root[data-theme="light"] .theme-toggle .icon-moon {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  .theme-toggle,
+  .theme-toggle svg {
+    transition: none;
+  }
+}
+
+/* --- Home ----------------------------------------------------------------- */
+
+.intro {
+  padding-bottom: 2.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.intro h1 {
+  font-size: 1.9rem;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin: 0 0 0.6rem;
+}
+
+.intro p {
+  margin: 0;
+  color: var(--text-dim);
+  max-width: var(--measure);
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.entry {
+  padding: 1.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.entry:last-child {
+  border-bottom: 0;
+}
+
+.entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  margin-bottom: 0.45rem;
+}
+
+.entry-title {
+  font-size: 1.15rem;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.4rem;
+}
+
+.entry-title a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.entry-title a:hover {
+  color: var(--accent);
+}
+
+.entry-excerpt {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  max-width: var(--measure);
+}
+
+/* A link entry is visually distinct from a post: it leaves the site. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.badge-link {
+  color: var(--accent);
+  border-color: var(--accent-quiet);
+  background: var(--accent-quiet);
+}
+
+.entry-title .external-arrow {
+  display: inline-block;
+  font-size: 0.85em;
+  transform: translateY(-1px);
+  margin-left: 0.15rem;
+  color: var(--text-faint);
+  transition: transform 0.2s ease;
+}
+
+.entry-title a:hover .external-arrow {
+  transform: translate(2px, -3px);
+  color: var(--accent);
+}
+
+/* --- Entry page ----------------------------------------------------------- */
+
+.entry-header {
+  padding-bottom: 1.5rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.entry-header h1 {
+  font-size: 2rem;
+  line-height: 1.18;
+  letter-spacing: -0.03em;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.preview-banner {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.7rem 0.95rem;
+  margin-bottom: 2rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.callout-link {
+  display: block;
+  padding: 1rem 1.15rem;
+  margin-bottom: 2rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  text-decoration: none;
+}
+
+.callout-link strong {
+  display: block;
+  color: var(--text);
+  margin-bottom: 0.15rem;
+}
+
+.callout-link span {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+
+/* --- Prose ---------------------------------------------------------------- */
+
+.prose {
+  max-width: var(--measure);
+}
+
+.prose > * + * {
+  margin-top: 1.25em;
+}
+
+.prose h2,
+.prose h3 {
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  margin-top: 2.2em;
+  margin-bottom: -0.4em;
+}
+
+.prose h2 {
+  font-size: 1.3rem;
+}
+
+.prose h3 {
+  font-size: 1.1rem;
+}
+
+.prose code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.15em 0.4em;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.prose pre {
+  padding: 1rem 1.15rem;
+  overflow-x: auto;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.prose pre code {
+  padding: 0;
+  background: none;
+  border: 0;
+  font-size: inherit;
+}
+
+.prose blockquote {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 1.1rem;
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-dim);
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.prose th,
+.prose td {
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.prose th {
+  background: var(--bg-elev);
+}
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* --- About ---------------------------------------------------------------- */
+
+.about-head {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.avatar {
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  object-fit: cover;
+}
+
+.about-head h1 {
+  font-size: 1.7rem;
+  letter-spacing: -0.025em;
+  margin: 0 0 0.35rem;
+}
+
+.about-head p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+}
+
+.placeholder-note {
+  display: inline-block;
+  margin-top: 0.6rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-faint);
+}
+
+@media (max-width: 34rem) {
+  .about-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}
+
+/* --- Tag pills ------------------------------------------------------------ */
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 2.5rem;
+}
+
+.tag {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.tag:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* --- Related -------------------------------------------------------------- */
+
+.related {
+  margin-top: 3.5rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.related h2 {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 1rem;
+}
+
+.related ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.related a {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.related a:hover {
+  color: var(--accent);
+}
+
+/* --- Footer --------------------------------------------------------------- */
+
+.site-footer {
+  margin-top: 5rem;
+  padding: 2rem 0 3rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.socials {
+  display: flex;
+  gap: 0.4rem;
+  margin-right: auto;
+}
+
+.socials a {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  transition: color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.socials a:hover {
+  color: var(--text);
+  background: var(--bg-elev);
+  transform: translateY(-1px);
+}
+
+.socials svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: currentColor;
+}
+
+.colophon {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.colophon a {
+  color: var(--text-dim);
+}
+
+/* --- Misc ----------------------------------------------------------------- */
+
+.empty {
+  padding: 3rem 0;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.error-page {
+  padding: 4rem 0;
+  text-align: center;
+}
+
+.error-page h1 {
+  font-family: var(--font-mono);
+  font-size: 3rem;
+  margin: 0 0 0.5rem;
+  color: var(--text-faint);
+}
+
+.view-count {
+  font-variant-numeric: tabular-nums;
+}

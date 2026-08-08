@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Placeholder portrait">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2b6d8f"/>
+      <stop offset="100%" stop-color="#17324a"/>
+    </linearGradient>
+    <clipPath id="circle">
+      <circle cx="100" cy="100" r="100"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#circle)">
+    <rect width="200" height="200" fill="url(#bg)"/>
+    <!-- Shoulders and head: a neutral silhouette that reads on either theme. -->
+    <circle cx="100" cy="78" r="34" fill="#9fd3ec" opacity="0.95"/>
+    <path d="M100 120c-33 0-60 24-64 56h128c-4-32-31-56-64-56Z" fill="#9fd3ec" opacity="0.95"/>
+  </g>
+</svg>

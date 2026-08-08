@@ -27,10 +27,13 @@ const list = async (path: string) =>
   }>();
 
 describe("meta", () => {
-  it("serves an API index at the root", async () => {
-    const res = await SELF.fetch("https://example.com/");
+  it("serves an API index at /api, leaving / to the site", async () => {
+    const res = await SELF.fetch("https://example.com/api");
     expect(res.status).toBe(200);
-    expect((await res.json<{ endpoints: string[] }>()).endpoints.length).toBeGreaterThan(0);
+
+    const body = await res.json<{ endpoints: string[]; documentation: string }>();
+    expect(body.endpoints.length).toBeGreaterThan(0);
+    expect(body.documentation).toBe("/docs");
   });
 
   it("reports health with a breakdown by kind and status", async () => {
@@ -52,9 +55,11 @@ describe("meta", () => {
     expect(body.byStatus).toEqual({ published: 4, preview: 1, draft: 1 });
   });
 
-  it("404s unknown routes as JSON", async () => {
-    const res = await SELF.fetch("https://example.com/nope");
+  it("404s unknown API routes as JSON", async () => {
+    const res = await SELF.fetch("https://example.com/api/nope");
+
     expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toContain("application/json");
     expect(await res.json()).toMatchObject({ error: "Not found" });
   });
 });
@@ -402,14 +407,14 @@ describe("feeds", () => {
     expect(xml).toContain("What I got wrong about edge caching (Example Engineering)");
     // guid stays on this domain so readers keep a stable identity for the item.
     expect(xml).toContain(
-      '<guid isPermaLink="false">http://localhost:8787/posts/guest-post-on-edge-caching</guid>',
+      '<guid isPermaLink="false">https://example.com/posts/guest-post-on-edge-caching</guid>',
     );
   });
 
   it("points post items at this site and excludes drafts", async () => {
     const xml = await (await SELF.fetch("https://example.com/feed.xml")).text();
 
-    expect(xml).toContain("<link>http://localhost:8787/posts/hello-world</link>");
+    expect(xml).toContain("<link>https://example.com/posts/hello-world</link>");
     expect(xml).not.toContain("Something I haven't finished");
   });
 
