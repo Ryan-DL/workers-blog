@@ -5,22 +5,42 @@ import { applySchema, resetViews } from "./helpers";
 beforeAll(applySchema);
 beforeEach(resetViews);
 
+interface Summary {
+  kind: "post" | "link";
+  slug: string;
+  title: string;
+  date: string;
+  tags: string[];
+  url?: string;
+  site?: string;
+  views?: number;
+  readingMinutes?: number;
+}
+
+const list = async (path: string) =>
+  (await SELF.fetch(`https://example.com${path}`)).json<{
+    entries: Summary[];
+    total: number;
+    limit: number;
+    offset: number;
+  }>();
+
 describe("meta", () => {
   it("serves an API index at the root", async () => {
     const res = await SELF.fetch("https://example.com/");
     expect(res.status).toBe(200);
-
-    const body = await res.json<{ endpoints: string[] }>();
-    expect(body.endpoints.length).toBeGreaterThan(0);
+    expect((await res.json<{ endpoints: string[] }>()).endpoints.length).toBeGreaterThan(0);
   });
 
-  it("reports health with a post count", async () => {
+  it("reports health with a breakdown by kind", async () => {
     const res = await SELF.fetch("https://example.com/api/health");
-    const body = await res.json<{ ok: boolean; posts: number }>();
+    const body = await res.json<{ ok: boolean; entries: number; posts: number; links: number }>();
 
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
-    expect(body.posts).toBeGreaterThan(0);
+    expect(body.posts).toBe(2);
+    expect(body.links).toBe(2);
+    expect(body.entries).toBe(body.posts + body.links);
   });
 
   it("404s unknown routes as JSON", async () => {
@@ -30,124 +50,176 @@ describe("meta", () => {
   });
 });
 
-describe("GET /api/posts", () => {
-  it("returns published posts newest-first and omits bodies", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts");
-    const body = await res.json<{ posts: any[]; total: number }>();
+describe("GET /api/entries", () => {
+  it("merges posts and links into one timeline, newest first", async () => {
+    const body = await list("/api/entries");
 
-    expect(res.status).toBe(200);
-    expect(body.posts.length).toBe(body.total);
-
-    const dates = body.posts.map((p) => p.date);
+    expect(body.total).toBe(4);
+    const dates = body.entries.map((e) => e.date);
     expect([...dates].sort().reverse()).toEqual(dates);
 
-    // List endpoints are summaries.
-    expect(body.posts[0]).not.toHaveProperty("html");
-    expect(body.posts[0]).not.toHaveProperty("markdown");
+    const kinds = new Set(body.entries.map((e) => e.kind));
+    expect(kinds).toEqual(new Set(["post", "link"]));
+  });
+
+  it("omits bodies from summaries", async () => {
+    const body = await list("/api/entries");
+    expect(body.entries[0]).not.toHaveProperty("html");
+    expect(body.entries[0]).not.toHaveProperty("markdown");
   });
 
   it("excludes drafts", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts?limit=100");
-    const body = await res.json<{ posts: { slug: string }[] }>();
-
-    expect(body.posts.map((p) => p.slug)).not.toContain("draft-example");
+    const body = await list("/api/entries?limit=100");
+    expect(body.entries.map((e) => e.slug)).not.toContain("draft-example");
   });
 
-  it("filters by tag, case-insensitively", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts?tag=CLOUDFLARE");
-    const body = await res.json<{ posts: { tags: string[] }[]; total: number }>();
+  it("filters by kind", async () => {
+    const posts = await list("/api/entries?kind=post");
+    const links = await list("/api/entries?kind=link");
 
-    expect(body.total).toBeGreaterThan(0);
-    for (const post of body.posts) {
-      expect(post.tags.map((t) => t.toLowerCase())).toContain("cloudflare");
-    }
+    expect(posts.entries.every((e) => e.kind === "post")).toBe(true);
+    expect(links.entries.every((e) => e.kind === "link")).toBe(true);
+    expect(posts.total + links.total).toBe(4);
   });
 
-  it("searches post bodies", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts?q=frontmatter");
-    const body = await res.json<{ total: number }>();
-
-    expect(body.total).toBeGreaterThan(0);
+  it("treats kind=all as unfiltered", async () => {
+    expect((await list("/api/entries?kind=all")).total).toBe(4);
   });
 
-  it("paginates", async () => {
-    const first = await (
-      await SELF.fetch("https://example.com/api/posts?limit=1")
-    ).json<{ posts: { slug: string }[]; total: number }>();
-    const second = await (
-      await SELF.fetch("https://example.com/api/posts?limit=1&offset=1")
-    ).json<{ posts: { slug: string }[] }>();
-
-    expect(first.posts).toHaveLength(1);
-    expect(second.posts).toHaveLength(1);
-    expect(first.posts[0]!.slug).not.toBe(second.posts[0]!.slug);
+  it("rejects an unknown kind rather than silently ignoring it", async () => {
+    const res = await SELF.fetch("https://example.com/api/entries?kind=posts");
+    expect(res.status).toBe(400);
+    expect((await res.json<{ error: string }>()).error).toContain("Invalid kind");
   });
 
-  it("ignores nonsense pagination params instead of erroring", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts?limit=abc&offset=-5");
-    expect(res.status).toBe(200);
-    expect((await res.json<{ limit: number; offset: number }>()).offset).toBe(0);
+  it("filters by tag across both kinds", async () => {
+    const body = await list("/api/entries?tag=CLOUDFLARE");
+
+    expect(body.total).toBe(4);
+    expect(new Set(body.entries.map((e) => e.kind))).toEqual(new Set(["post", "link"]));
   });
 
-  it("caps limit at 100", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts?limit=9999");
-    expect((await res.json<{ limit: number }>()).limit).toBe(100);
+  it("paginates and caps limit", async () => {
+    const first = await list("/api/entries?limit=1");
+    const second = await list("/api/entries?limit=1&offset=1");
+
+    expect(first.entries).toHaveLength(1);
+    expect(first.entries[0]!.slug).not.toBe(second.entries[0]!.slug);
+    expect((await list("/api/entries?limit=9999")).limit).toBe(100);
+    expect((await list("/api/entries?limit=abc&offset=-5")).offset).toBe(0);
   });
 });
 
-describe("GET /api/posts/:slug", () => {
-  it("returns the full post with rendered HTML", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts/hello-world");
-    const post = await res.json<{ title: string; html: string; markdown: string }>();
+describe("kind-pinned aliases", () => {
+  it("/api/posts returns only hosted posts", async () => {
+    const body = await list("/api/posts");
+    expect(body.total).toBe(2);
+    expect(body.entries.every((e) => e.kind === "post")).toBe(true);
+  });
+
+  it("/api/links returns only external links", async () => {
+    const body = await list("/api/links");
+    expect(body.total).toBe(2);
+    expect(body.entries.every((e) => e.kind === "link")).toBe(true);
+  });
+
+  it("ignores a conflicting kind param on an alias", async () => {
+    const body = await list("/api/links?kind=post");
+    expect(body.entries.every((e) => e.kind === "link")).toBe(true);
+  });
+});
+
+describe("external links", () => {
+  it("exposes url, site, and kind", async () => {
+    const body = await list("/api/links");
+    const guest = body.entries.find((e) => e.slug === "guest-post-on-edge-caching");
+
+    expect(guest).toMatchObject({
+      kind: "link",
+      title: "What I got wrong about edge caching",
+      date: "2026-02-20T00:00:00.000Z",
+      url: "https://example.com/blog/edge-caching-mistakes",
+      site: "Example Engineering",
+    });
+  });
+
+  it("derives site from the URL host when unset, dropping www.", async () => {
+    const body = await list("/api/links");
+    expect(body.entries.find((e) => e.slug === "sqlite-at-the-edge")?.site).toBe("example.org");
+  });
+
+  it("carries no readingMinutes, since the body isn't the content", async () => {
+    const body = await list("/api/links");
+    expect(body.entries.every((e) => e.readingMinutes === undefined)).toBe(true);
+  });
+
+  it("serves commentary as the body on the detail route", async () => {
+    const res = await SELF.fetch("https://example.com/api/entries/guest-post-on-edge-caching");
+    const entry = await res.json<{ kind: string; url: string; html: string; excerpt: string }>();
 
     expect(res.status).toBe(200);
+    expect(entry.kind).toBe("link");
+    expect(entry.url).toBe("https://example.com/blog/edge-caching-mistakes");
+    expect(entry.html).toContain("cache invalidation");
+    expect(entry.excerpt).toContain("someone else's blog");
+  });
+
+  it("handles a link with no commentary at all", async () => {
+    const res = await SELF.fetch("https://example.com/api/entries/sqlite-at-the-edge");
+    const entry = await res.json<{ html: string; markdown: string; excerpt: string }>();
+
+    expect(res.status).toBe(200);
+    expect(entry.html).toBe("");
+    expect(entry.markdown).toBe("");
+    expect(entry.excerpt).toBe("");
+  });
+});
+
+describe("GET /api/entries/:slug", () => {
+  it("returns a full post with rendered HTML", async () => {
+    const res = await SELF.fetch("https://example.com/api/entries/hello-world");
+    const post = await res.json<{ kind: string; title: string; html: string; markdown: string }>();
+
+    expect(res.status).toBe(200);
+    expect(post.kind).toBe("post");
     expect(post.title).toBe("Hello, world");
     expect(post.html).toContain("<h2");
     expect(post.markdown).toContain("content pipeline");
   });
 
   it("does not leak the source file path", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts/hello-world");
+    const res = await SELF.fetch("https://example.com/api/entries/hello-world");
     expect(await res.json()).not.toHaveProperty("sourceFile");
   });
 
-  it("404s unknown slugs", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts/does-not-exist");
-    expect(res.status).toBe(404);
-  });
-
-  it("404s drafts", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts/draft-example");
-    expect(res.status).toBe(404);
+  it("404s unknown slugs and drafts", async () => {
+    for (const slug of ["does-not-exist", "draft-example"]) {
+      const res = await SELF.fetch(`https://example.com/api/entries/${slug}`);
+      expect(res.status).toBe(404);
+    }
   });
 });
 
 describe("view counts", () => {
-  it("starts at zero", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts/hello-world/views");
-    expect(await res.json()).toEqual({ slug: "hello-world", views: 0 });
-  });
+  it("starts at zero and increments on POST", async () => {
+    const zero = await SELF.fetch("https://example.com/api/entries/hello-world/views");
+    expect(await zero.json()).toEqual({ slug: "hello-world", views: 0 });
 
-  it("increments on POST", async () => {
     for (const expected of [1, 2, 3]) {
-      const res = await SELF.fetch("https://example.com/api/posts/hello-world/views", {
+      const res = await SELF.fetch("https://example.com/api/entries/hello-world/views", {
         method: "POST",
       });
-      expect(await res.json<{ views: number }>()).toEqual({
-        slug: "hello-world",
-        views: expected,
-      });
+      expect(await res.json<{ views: number }>()).toEqual({ slug: "hello-world", views: expected });
     }
-
-    const read = await SELF.fetch("https://example.com/api/posts/hello-world/views");
-    expect((await read.json<{ views: number }>()).views).toBe(3);
   });
 
-  it("refuses to record views for slugs that aren't published", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts/draft-example/views", {
+  it("rejects view counting on an external link with 400, not 404", async () => {
+    const res = await SELF.fetch("https://example.com/api/entries/sqlite-at-the-edge/views", {
       method: "POST",
     });
-    expect(res.status).toBe(404);
+
+    expect(res.status).toBe(400);
+    expect((await res.json<{ error: string }>()).error).toContain("external link");
 
     const { results } = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM post_views",
@@ -155,79 +227,93 @@ describe("view counts", () => {
     expect(results[0]!.n).toBe(0);
   });
 
-  it("attaches counts to the list endpoint on request", async () => {
-    await SELF.fetch("https://example.com/api/posts/hello-world/views", { method: "POST" });
+  it("404s view counting on slugs that aren't published", async () => {
+    const res = await SELF.fetch("https://example.com/api/entries/draft-example/views", {
+      method: "POST",
+    });
+    expect(res.status).toBe(404);
+  });
 
-    const res = await SELF.fetch("https://example.com/api/posts?views=1");
-    const body = await res.json<{ posts: { slug: string; views: number }[] }>();
+  it("attaches counts to posts in the timeline, leaving links untouched", async () => {
+    await SELF.fetch("https://example.com/api/entries/hello-world/views", { method: "POST" });
 
-    const hello = body.posts.find((p) => p.slug === "hello-world");
-    expect(hello?.views).toBe(1);
-    // Unread posts report zero rather than going missing.
-    expect(body.posts.every((p) => typeof p.views === "number")).toBe(true);
+    const body = await list("/api/entries?views=1");
+    const posts = body.entries.filter((e) => e.kind === "post");
+    const links = body.entries.filter((e) => e.kind === "link");
+
+    expect(body.entries.find((e) => e.slug === "hello-world")?.views).toBe(1);
+    expect(posts.every((e) => typeof e.views === "number")).toBe(true);
+    expect(links.every((e) => e.views === undefined)).toBe(true);
   });
 
   it("ranks popular posts and drops unknown slugs", async () => {
-    await SELF.fetch("https://example.com/api/posts/why-workers/views", {
-      method: "POST",
-    });
-    await SELF.fetch("https://example.com/api/posts/hello-world/views", { method: "POST" });
-    await SELF.fetch("https://example.com/api/posts/hello-world/views", { method: "POST" });
+    await SELF.fetch("https://example.com/api/entries/why-workers/views", { method: "POST" });
+    await SELF.fetch("https://example.com/api/entries/hello-world/views", { method: "POST" });
+    await SELF.fetch("https://example.com/api/entries/hello-world/views", { method: "POST" });
 
     // A stale row whose Markdown file no longer exists.
     await env.DB.prepare("INSERT INTO post_views (slug, views) VALUES ('deleted-post', 999)").run();
 
     const res = await SELF.fetch("https://example.com/api/popular");
-    const body = await res.json<{ posts: { slug: string; views: number }[] }>();
+    const body = await res.json<{ entries: Summary[] }>();
 
-    expect(body.posts.map((p) => p.slug)).not.toContain("deleted-post");
-    expect(body.posts[0]!.slug).toBe("hello-world");
-    expect(body.posts[0]!.views).toBe(2);
+    expect(body.entries.map((e) => e.slug)).not.toContain("deleted-post");
+    expect(body.entries[0]).toMatchObject({ slug: "hello-world", views: 2 });
   });
 });
 
-describe("tags and related posts", () => {
-  it("counts tags, most-used first", async () => {
+describe("tags and related entries", () => {
+  it("counts tags across both kinds, most-used first", async () => {
     const res = await SELF.fetch("https://example.com/api/tags");
     const { tags } = await res.json<{ tags: { tag: string; count: number }[] }>();
 
-    expect(tags.length).toBeGreaterThan(0);
     const counts = tags.map((t) => t.count);
     expect([...counts].sort((a, b) => b - a)).toEqual(counts);
+    expect(tags.find((t) => t.tag === "cloudflare")?.count).toBe(4);
     // The draft's tags must not be counted.
     expect(tags.find((t) => t.tag === "meta")?.count).toBe(1);
   });
 
-  it("finds posts sharing tags", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts/hello-world/related");
-    const { posts } = await res.json<{ posts: { slug: string }[] }>();
+  it("relates posts to links through shared tags", async () => {
+    const res = await SELF.fetch("https://example.com/api/entries/why-workers/related?limit=10");
+    const { entries } = await res.json<{ entries: Summary[] }>();
 
-    expect(posts.map((p) => p.slug)).toContain("why-workers");
-    expect(posts.map((p) => p.slug)).not.toContain("hello-world");
+    expect(entries.map((e) => e.slug)).toContain("guest-post-on-edge-caching");
+    expect(entries.map((e) => e.slug)).not.toContain("why-workers");
   });
 
   it("404s related for unknown slugs", async () => {
-    const res = await SELF.fetch("https://example.com/api/posts/nope/related");
+    const res = await SELF.fetch("https://example.com/api/entries/nope/related");
     expect(res.status).toBe(404);
   });
 });
 
 describe("feeds", () => {
-  it("serves valid-looking RSS without drafts", async () => {
-    const res = await SELF.fetch("https://example.com/feed.xml");
-    const xml = await res.text();
+  it("points link items at the external URL but keeps a local guid", async () => {
+    const xml = await (await SELF.fetch("https://example.com/feed.xml")).text();
 
-    expect(res.headers.get("content-type")).toContain("application/rss+xml");
-    expect(xml).toContain("<rss version=\"2.0\"");
-    expect(xml).toContain("<title>Hello, world</title>");
+    expect(xml).toContain("<link>https://example.com/blog/edge-caching-mistakes</link>");
+    expect(xml).toContain("What I got wrong about edge caching (Example Engineering)");
+    // guid stays on this domain so readers keep a stable identity for the item.
+    expect(xml).toContain(
+      '<guid isPermaLink="false">http://localhost:8787/posts/guest-post-on-edge-caching</guid>',
+    );
+  });
+
+  it("points post items at this site and excludes drafts", async () => {
+    const xml = await (await SELF.fetch("https://example.com/feed.xml")).text();
+
+    expect(xml).toContain("<link>http://localhost:8787/posts/hello-world</link>");
     expect(xml).not.toContain("Something I haven't finished");
   });
 
-  it("serves a sitemap", async () => {
+  it("keeps external links out of the sitemap", async () => {
     const res = await SELF.fetch("https://example.com/sitemap.xml");
     const xml = await res.text();
 
     expect(res.status).toBe(200);
     expect(xml).toContain("/posts/hello-world");
+    expect(xml).not.toContain("example.org");
+    expect(xml).not.toContain("guest-post-on-edge-caching");
   });
 });

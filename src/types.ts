@@ -1,5 +1,16 @@
-/** A post compiled from content/posts/*.md by scripts/build-content.mjs. */
-export interface Post {
+/**
+ * Entries compiled from content/ by scripts/build-content.mjs.
+ *
+ * The blog has two kinds of entry: posts written here, and links to posts
+ * published elsewhere. They share a timeline, so they share a base shape and
+ * are told apart by `kind`.
+ */
+
+export type EntryKind = "post" | "link";
+
+interface BaseEntry {
+  kind: EntryKind;
+  /** Stable identifier, unique across both kinds. */
   slug: string;
   title: string;
   /** ISO 8601. */
@@ -10,7 +21,6 @@ export interface Post {
   tags: string[];
   author: string | null;
   excerpt: string;
-  readingMinutes: number;
   /** Original Markdown body, frontmatter stripped. */
   markdown: string;
   /** Rendered at build time. */
@@ -18,8 +28,30 @@ export interface Post {
   sourceFile: string;
 }
 
-/** Post shape returned by list endpoints — omits the heavy body fields. */
-export type PostSummary = Omit<Post, "markdown" | "html" | "sourceFile">;
+/** A post hosted by this blog. */
+export interface Post extends BaseEntry {
+  kind: "post";
+  readingMinutes: number;
+}
+
+/**
+ * A post published on another site. The body, if any, is commentary shown
+ * alongside the link — the real content lives at `url`.
+ */
+export interface Link extends BaseEntry {
+  kind: "link";
+  /** Absolute URL of the external post. */
+  url: string;
+  /** Human-readable source, e.g. "Another Site". Derived from the host if unset. */
+  site: string;
+}
+
+export type Entry = Post | Link;
+
+/** Entry shape returned by list endpoints — omits the heavy body fields. */
+export type EntrySummary =
+  | Omit<Post, "markdown" | "html" | "sourceFile">
+  | Omit<Link, "markdown" | "html" | "sourceFile">;
 
 // `Env` (the DB binding and the vars) is not declared here: it's generated from
 // wrangler.jsonc into worker-configuration.d.ts as a global, so the two can't

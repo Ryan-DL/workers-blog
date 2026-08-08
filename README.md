@@ -1,27 +1,40 @@
 # blog-part2
 
-A blog backend on Cloudflare Workers. Posts are Markdown files in this repo;
+A blog backend on Cloudflare Workers. Content is Markdown files in this repo;
 D1 holds the mutable state (view counts). No front end yet — this is a JSON API.
 
-## The core idea
+## The model
 
-Two kinds of data, stored two different ways:
+The blog is one chronological timeline of **entries**, of two kinds:
 
-| | Where it lives | Changes |
+| `kind` | What it is | Lives in | Extra fields |
+| --- | --- | --- | --- |
+| `post` | Written and hosted here | `content/posts/*.md` | `readingMinutes` |
+| `link` | Published on another site | `content/links/*.md` | `url`, `site` |
+
+Every entry carries `kind`, so the front end branches on one field: render a
+`post` as a permalink to your own page, and a `link` as a card pointing offsite.
+Both kinds share `slug`, `title`, `date`, `updated`, `tags`, `author`,
+`excerpt`, and a body. For a link the body is *commentary* — a sentence or two
+about the piece — and may be empty; the real content is at `url`.
+
+## Where data lives
+
+| | Where | Changes |
 | --- | --- | --- |
-| Post content | `content/posts/*.md`, compiled into the Worker bundle | On deploy |
+| Entry content | `content/**/*.md`, compiled into the Worker bundle | On deploy |
 | View counts | D1 (`post_views`) | Every request |
 
 `scripts/build-content.mjs` parses frontmatter and renders Markdown to HTML **at
-build time**, in Node, and writes `src/generated/posts.ts`. So `gray-matter` and
-`marked` never ship to the edge, cold starts don't parse anything, and a
-malformed post fails the build instead of a request.
+build time**, in Node, and writes `src/generated/entries.ts`. So `gray-matter`
+and `marked` never ship to the edge, cold starts don't parse anything, and a
+malformed entry fails the build instead of a request.
 
 ## Getting started
 
 ```bash
 npm install
-npm run content:build          # compile content/posts -> src/generated/posts.ts
+npm run content:build          # compile content/ -> src/generated/entries.ts
 npm run db:apply:local         # create post_views in the local D1
 npm run dev                    # http://localhost:8787
 ```
@@ -49,28 +62,63 @@ updated: 2026-01-20      # optional
 Body goes here.
 ```
 
-`readingMinutes` and `excerpt` are computed for you. Duplicate slugs, missing
-titles, and unparseable dates fail the build with the offending filename.
+## Linking to a post you wrote elsewhere
+
+Same idea, but in `content/links/` and with a required `url`:
+
+```markdown
+---
+title: What I got wrong about edge caching   # required
+date: 2026-02-20                             # required
+url: https://example.com/blog/the-post       # required — absolute http(s)
+site: Example Engineering                    # optional — defaults to the URL host
+tags: [cloudflare]                           # optional
+---
+
+Optional commentary, shown next to the link.
+```
+
+`site` defaults to the hostname with `www.` stripped, so
+`https://www.example.org/x` gives `example.org`.
+
+The build fails, naming the file, on: a missing `title` or `date`, an
+unparseable date, a link with no `url` or a non-absolute one, or a slug already
+used by another entry **of either kind**.
 
 ## API
+
+Everything returns `entries` — a mixed list unless you narrow it by kind.
 
 | Method | Route | Notes |
 | --- | --- | --- |
 | GET | `/` | Endpoint index |
-| GET | `/api/health` | `{ ok, posts, timestamp }` |
-| GET | `/api/posts` | `?tag=&q=&limit=&offset=&views=` — summaries, newest first |
-| GET | `/api/posts/:slug` | Full post incl. `markdown` and rendered `html`; `?views=1` |
-| GET | `/api/posts/:slug/related` | Posts sharing the most tags; `?limit=` |
-| GET | `/api/posts/:slug/views` | Current count |
-| POST | `/api/posts/:slug/views` | Atomic increment, returns new count |
-| GET | `/api/tags` | Tags with counts, most-used first |
+| GET | `/api/health` | `{ ok, entries, posts, links, timestamp }` |
+| GET | `/api/entries` | The timeline. `?kind=&tag=&q=&limit=&offset=&views=` |
+| GET | `/api/posts` | Alias for `?kind=post` |
+| GET | `/api/links` | Alias for `?kind=link` |
+| GET | `/api/entries/:slug` | Full entry incl. `markdown` and `html`; `?views=1` |
+| GET | `/api/entries/:slug/related` | Entries sharing the most tags; `?limit=` |
+| GET | `/api/entries/:slug/views` | Posts only |
+| POST | `/api/entries/:slug/views` | Posts only; atomic increment |
+| GET | `/api/tags` | Tags with counts across both kinds, most-used first |
 | GET | `/api/popular` | Most-viewed posts; `?limit=` |
-| GET | `/feed.xml` | RSS 2.0 with full post HTML |
-| GET | `/sitemap.xml` | |
+| GET | `/feed.xml` | RSS 2.0 over the whole timeline |
+| GET | `/sitemap.xml` | Hosted posts only |
 
-`limit` caps at 100. Malformed pagination params fall back to defaults rather
-than erroring. Drafts 404 everywhere. `POST /views` 404s for unknown slugs, so
-the table can't be seeded with arbitrary keys.
+Behaviour worth knowing:
+
+- `kind` accepts `post`, `link`, or `all`. Anything else is a **400** — silently
+  returning links to someone who asked for `kind=posts` would be a wrong answer,
+  not a degraded one. Malformed *pagination* params do fall back to defaults.
+- `limit` caps at 100.
+- Drafts 404 everywhere and are excluded from tag counts and feeds.
+- View counting is posts-only. On a link it returns **400** (the entry exists,
+  the operation doesn't apply); on an unknown slug, 404. `?views=1` on the
+  timeline attaches `views` to posts and leaves links without the field.
+- In RSS, a link item's `<link>` points at the external URL, while its `<guid>`
+  stays on your domain so readers keep a stable identity for the item.
+- The sitemap lists only hosted posts — `renderSitemap` takes `Post[]`, not
+  `Entry[]`, so including an external URL is a compile error.
 
 ## Going live
 
@@ -92,17 +140,19 @@ sitemap build absolute URLs from it.
 ## Layout
 
 ```
-content/posts/*.md        posts (the source of truth)
-scripts/build-content.mjs build-time Markdown -> src/generated/posts.ts
+content/posts/*.md        posts hosted here
+content/links/*.md        links to posts published elsewhere
+scripts/build-content.mjs build-time Markdown -> src/generated/entries.ts
 src/index.ts              Hono app and routes
-src/content.ts            queries over the compiled posts
+src/content.ts            queries over the compiled entries
 src/views.ts              D1 view counting
 src/feed.ts               RSS + sitemap
 src/db/schema.sql         D1 schema
 test/api.spec.ts          integration tests against a real Worker + D1
 ```
 
-`src/generated/` is gitignored — it's rebuilt from the Markdown every time.
+`src/generated/` is gitignored — it's wiped and rebuilt from the Markdown on
+every build.
 
 ## Notes for the front end
 

@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 /**
- * Compiles content/posts/*.md into src/generated/posts.ts.
+ * Compiles content/ into src/generated/entries.ts.
+ *
+ * Two sources feed one timeline:
+ *   content/posts/*.md  -> kind "post", hosted here
+ *   content/links/*.md  -> kind "link", published elsewhere, body is commentary
  *
  * Frontmatter parsing and Markdown rendering happen HERE, at build time, in
  * Node — not in the Worker. That keeps `gray-matter` and `marked` out of the
- * deployed bundle, keeps cold starts fast, and means a malformed post fails the
- * build instead of a request.
+ * deployed bundle, keeps cold starts fast, and means a malformed entry fails
+ * the build instead of a request.
  *
  * Run it via `npm run content:build` (dev/deploy/test do this automatically).
  */
 
-import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { join, basename, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
@@ -18,8 +22,9 @@ import { marked } from "marked";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const POSTS_DIR = join(ROOT, "content", "posts");
+const LINKS_DIR = join(ROOT, "content", "links");
 const OUT_DIR = join(ROOT, "src", "generated");
-const OUT_FILE = join(OUT_DIR, "posts.ts");
+const OUT_FILE = join(OUT_DIR, "entries.ts");
 
 marked.setOptions({ gfm: true, breaks: false });
 
@@ -64,69 +69,131 @@ function normalizeDate(value, file) {
   fail(file, "frontmatter is missing required `date`");
 }
 
-async function main() {
+/** "https://www.example.com/a/b" -> "example.com" */
+function siteFromUrl(url) {
+  return new URL(url).hostname.replace(/^www\./, "");
+}
+
+/** Read a directory of Markdown files, tolerating its absence. */
+async function readMarkdownDir(dir, label) {
   let filenames;
   try {
-    filenames = (await readdir(POSTS_DIR)).filter((f) => f.endsWith(".md"));
+    filenames = (await readdir(dir)).filter((f) => f.endsWith(".md"));
   } catch (err) {
-    if (err.code === "ENOENT") fail("content/posts", "directory does not exist");
+    // An empty or missing links/ directory is normal, not an error.
+    if (err.code === "ENOENT") return [];
     throw err;
   }
   filenames.sort();
 
-  const posts = [];
+  return Promise.all(
+    filenames.map(async (filename) => ({
+      filename,
+      sourceFile: `content/${label}/${filename}`,
+      ...matter(await readFile(join(dir, filename), "utf8")),
+    })),
+  );
+}
+
+/** Fields every entry shares, whichever kind it is. */
+function commonFields(file, data, content) {
+  if (!data.title) fail(file, "frontmatter is missing required `title`");
+
+  const plain = toPlainText(content);
+  return {
+    title: String(data.title),
+    date: normalizeDate(data.date, file),
+    updated: data.updated ? normalizeDate(data.updated, file) : null,
+    // An entry is published unless it explicitly says `draft: true`.
+    draft: data.draft === true,
+    tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+    author: data.author ? String(data.author) : null,
+    excerpt: data.excerpt ? String(data.excerpt) : excerptFrom(plain),
+    markdown: content.trim(),
+    html: marked.parse(content).trim(),
+    plain,
+  };
+}
+
+async function main() {
+  const entries = [];
   const seenSlugs = new Map();
 
-  for (const filename of filenames) {
-    const raw = await readFile(join(POSTS_DIR, filename), "utf8");
-    const { data, content } = matter(raw);
-
-    if (!data.title) fail(filename, "frontmatter is missing required `title`");
-
-    const slug = data.slug ? String(data.slug) : slugFromFilename(filename);
+  function claimSlug(slug, filename) {
     if (seenSlugs.has(slug)) {
       fail(filename, `slug "${slug}" already used by ${seenSlugs.get(slug)}`);
     }
     seenSlugs.set(slug, filename);
+    return slug;
+  }
 
-    const plain = toPlainText(content);
+  // --- Posts hosted here ---
+  for (const { filename, sourceFile, data, content } of await readMarkdownDir(POSTS_DIR, "posts")) {
+    const { plain, ...common } = commonFields(filename, data, content);
     const words = plain ? plain.split(" ").length : 0;
 
-    posts.push({
-      slug,
-      title: String(data.title),
-      date: normalizeDate(data.date, filename),
-      updated: data.updated ? normalizeDate(data.updated, filename) : null,
-      // A post is published unless it explicitly says `draft: true`.
-      draft: data.draft === true,
-      tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
-      author: data.author ? String(data.author) : null,
-      excerpt: data.excerpt ? String(data.excerpt) : excerptFrom(plain),
+    entries.push({
+      kind: "post",
+      slug: claimSlug(data.slug ? String(data.slug) : slugFromFilename(filename), filename),
+      ...common,
       readingMinutes: Math.max(1, Math.round(words / 220)),
-      markdown: content.trim(),
-      html: marked.parse(content).trim(),
-      sourceFile: `content/posts/${filename}`,
+      sourceFile,
+    });
+  }
+
+  // --- Links to posts published elsewhere ---
+  for (const { filename, sourceFile, data, content } of await readMarkdownDir(LINKS_DIR, "links")) {
+    if (!data.url) fail(filename, "frontmatter is missing required `url`");
+
+    const url = String(data.url);
+    let site;
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        fail(filename, `url must be http(s), got "${parsed.protocol}"`);
+      }
+      site = data.site ? String(data.site) : siteFromUrl(url);
+    } catch (err) {
+      if (err.message.startsWith("[content]")) throw err;
+      fail(filename, `url "${url}" is not an absolute URL`);
+    }
+
+    const { plain: _plain, ...common } = commonFields(filename, data, content);
+
+    entries.push({
+      kind: "link",
+      slug: claimSlug(data.slug ? String(data.slug) : slugFromFilename(filename), filename),
+      ...common,
+      url,
+      site,
+      sourceFile,
     });
   }
 
   // Newest first — the order the API serves them in.
-  posts.sort((a, b) => b.date.localeCompare(a.date));
+  entries.sort((a, b) => b.date.localeCompare(a.date));
 
   const banner =
     "// AUTO-GENERATED by scripts/build-content.mjs — do not edit.\n" +
     "// Regenerate with: npm run content:build\n\n" +
-    'import type { Post } from "../types";\n\n';
+    'import type { Entry } from "../types";\n\n';
 
-  const body = `export const POSTS: readonly Post[] = ${JSON.stringify(posts, null, 2)} as const;\n`;
+  const body = `export const ENTRIES: readonly Entry[] = ${JSON.stringify(entries, null, 2)} as const;\n`;
 
+  // Wipe rather than overwrite: a module left behind by an earlier version of
+  // this script would still typecheck against the current types and confuse
+  // the build.
+  await rm(OUT_DIR, { recursive: true, force: true });
   await mkdir(OUT_DIR, { recursive: true });
   await writeFile(OUT_FILE, banner + body, "utf8");
 
-  const drafts = posts.filter((p) => p.draft).length;
+  const posts = entries.filter((e) => e.kind === "post").length;
+  const links = entries.filter((e) => e.kind === "link").length;
+  const drafts = entries.filter((e) => e.draft).length;
   console.log(
-    `[content] ${posts.length} post(s) compiled` +
+    `[content] ${posts} post(s), ${links} link(s) compiled` +
       (drafts ? ` (${drafts} draft${drafts === 1 ? "" : "s"})` : "") +
-      ` -> src/generated/posts.ts`,
+      ` -> src/generated/entries.ts`,
   );
 }
 
