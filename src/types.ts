@@ -8,6 +8,18 @@
 
 export type EntryKind = "post" | "link";
 
+/**
+ * Where an entry sits between "not written yet" and "public".
+ *
+ * - `published` — in every list, feed, and tag count.
+ * - `preview`   — fetchable by slug so the front end can render it, but absent
+ *                 from all listings, feeds, tags, related results, and the
+ *                 sitemap. Unlisted, not access-controlled: anyone who knows
+ *                 the slug can read it.
+ * - `draft`     — never served at all; 404 everywhere.
+ */
+export type EntryStatus = "published" | "preview" | "draft";
+
 interface BaseEntry {
   kind: EntryKind;
   /** Stable identifier, unique across both kinds. */
@@ -17,7 +29,7 @@ interface BaseEntry {
   date: string;
   /** ISO 8601, or null if never revised. */
   updated: string | null;
-  draft: boolean;
+  status: EntryStatus;
   tags: string[];
   author: string | null;
   excerpt: string;

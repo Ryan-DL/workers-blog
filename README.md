@@ -14,9 +14,37 @@ The blog is one chronological timeline of **entries**, of two kinds:
 
 Every entry carries `kind`, so the front end branches on one field: render a
 `post` as a permalink to your own page, and a `link` as a card pointing offsite.
-Both kinds share `slug`, `title`, `date`, `updated`, `tags`, `author`,
-`excerpt`, and a body. For a link the body is *commentary* — a sentence or two
-about the piece — and may be empty; the real content is at `url`.
+Both kinds share `slug`, `title`, `date`, `updated`, `status`, `tags`,
+`author`, `excerpt`, and a body. For a link the body is *commentary* — a
+sentence or two about the piece — and may be empty; the real content is at
+`url`.
+
+## Publication status
+
+Every entry also carries a `status`, which decides where it shows up:
+
+| `status` | Listings, feeds, tags, sitemap | Fetchable at `/api/entries/:slug` |
+| --- | --- | --- |
+| `published` (default) | yes | yes |
+| `preview` | **no** | **yes** |
+| `draft` | no | no — 404 |
+
+`preview` is the state for "not published, but I want to look at it". The front
+end can render it exactly as it will appear once live, and you can send someone
+the link — but it appears in no list, feed, tag count, related result, or
+sitemap, so nobody stumbles onto it.
+
+**A preview is unlisted, not protected.** Anyone who knows or guesses the slug
+can read it. The API sets `X-Robots-Tag: noindex, nofollow` and
+`Cache-Control: private, no-store` on preview responses, which keeps honest
+crawlers and shared caches away, but it is not access control. Don't put
+anything sensitive in one. (If you later want real protection, a token check on
+the detail route is the place to add it.)
+
+Since `status` comes back on every entry, the front end can render a
+"Preview — not published" banner by checking one field. It should also emit
+`<meta name="robots" content="noindex">` on preview pages, since the header on
+the API response doesn't cover the HTML page built from it.
 
 ## Where data lives
 
@@ -51,16 +79,21 @@ optional `YYYY-MM-DD-` prefix stripped: `2026-01-15-hello-world.md` → `hello-w
 ---
 title: Hello, world      # required
 date: 2026-01-15         # required
+status: preview          # optional — published (default) | preview | draft
 tags: [meta, cloudflare] # optional
 author: Ryan             # optional
 excerpt: ...             # optional — derived from the body if omitted
 slug: custom-slug        # optional — overrides the filename
-draft: true              # optional — drafts are never served
 updated: 2026-01-20      # optional
 ---
 
 Body goes here.
 ```
+
+`draft: true` and `preview: true` are shorthands for the matching `status`.
+Setting both, or setting a `status` that contradicts a shorthand, fails the
+build rather than picking a winner — guessing wrong there either leaks an
+unfinished post or hides a finished one.
 
 ## Linking to a post you wrote elsewhere
 
@@ -82,8 +115,9 @@ Optional commentary, shown next to the link.
 `https://www.example.org/x` gives `example.org`.
 
 The build fails, naming the file, on: a missing `title` or `date`, an
-unparseable date, a link with no `url` or a non-absolute one, or a slug already
-used by another entry **of either kind**.
+unparseable date, a link with no `url` or a non-absolute one, an unknown or
+self-contradicting `status`, or a slug already used by another entry **of
+either kind**.
 
 ## API
 
@@ -92,7 +126,7 @@ Everything returns `entries` — a mixed list unless you narrow it by kind.
 | Method | Route | Notes |
 | --- | --- | --- |
 | GET | `/` | Endpoint index |
-| GET | `/api/health` | `{ ok, entries, posts, links, timestamp }` |
+| GET | `/api/health` | `{ ok, entries, posts, links, byStatus, timestamp }` |
 | GET | `/api/entries` | The timeline. `?kind=&tag=&q=&limit=&offset=&views=` |
 | GET | `/api/posts` | Alias for `?kind=post` |
 | GET | `/api/links` | Alias for `?kind=link` |
@@ -111,10 +145,13 @@ Behaviour worth knowing:
   returning links to someone who asked for `kind=posts` would be a wrong answer,
   not a degraded one. Malformed *pagination* params do fall back to defaults.
 - `limit` caps at 100.
-- Drafts 404 everywhere and are excluded from tag counts and feeds.
-- View counting is posts-only. On a link it returns **400** (the entry exists,
-  the operation doesn't apply); on an unknown slug, 404. `?views=1` on the
-  timeline attaches `views` to posts and leaves links without the field.
+- Drafts 404 everywhere. Previews 404 from nothing but appear in no listing —
+  see [Publication status](#publication-status).
+- View counting is for **published posts** only. On a link or a preview it
+  returns **400** (the entry exists, the operation doesn't apply); on an
+  unknown slug, 404. Preview reads are deliberately not counted, so a post
+  doesn't launch with inflated numbers. `?views=1` on the timeline attaches
+  `views` to posts and leaves links without the field.
 - In RSS, a link item's `<link>` points at the external URL, while its `<guid>`
   stays on your domain so readers keep a stable identity for the item.
 - The sitemap lists only hosted posts — `renderSitemap` takes `Post[]`, not

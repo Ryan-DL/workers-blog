@@ -95,6 +95,36 @@ async function readMarkdownDir(dir, label) {
   );
 }
 
+const STATUSES = ["published", "preview", "draft"];
+
+/**
+ * Resolve the publication status from frontmatter.
+ *
+ * `status:` is canonical; `draft: true` and `preview: true` are shorthands.
+ * Contradicting each other fails the build rather than picking a winner —
+ * guessing wrong here either leaks an unfinished post or hides a finished one.
+ */
+function normalizeStatus(file, data) {
+  const shorthands = [];
+  if (data.draft === true) shorthands.push("draft");
+  if (data.preview === true) shorthands.push("preview");
+
+  if (shorthands.length > 1) {
+    fail(file, "`draft: true` and `preview: true` are mutually exclusive");
+  }
+
+  if (data.status === undefined) return shorthands[0] ?? "published";
+
+  const status = String(data.status);
+  if (!STATUSES.includes(status)) {
+    fail(file, `unknown status "${status}" — expected ${STATUSES.join(", ")}`);
+  }
+  if (shorthands.length === 1 && shorthands[0] !== status) {
+    fail(file, `\`status: ${status}\` contradicts \`${shorthands[0]}: true\``);
+  }
+  return status;
+}
+
 /** Fields every entry shares, whichever kind it is. */
 function commonFields(file, data, content) {
   if (!data.title) fail(file, "frontmatter is missing required `title`");
@@ -104,8 +134,7 @@ function commonFields(file, data, content) {
     title: String(data.title),
     date: normalizeDate(data.date, file),
     updated: data.updated ? normalizeDate(data.updated, file) : null,
-    // An entry is published unless it explicitly says `draft: true`.
-    draft: data.draft === true,
+    status: normalizeStatus(file, data),
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
     author: data.author ? String(data.author) : null,
     excerpt: data.excerpt ? String(data.excerpt) : excerptFrom(plain),
@@ -189,10 +218,14 @@ async function main() {
 
   const posts = entries.filter((e) => e.kind === "post").length;
   const links = entries.filter((e) => e.kind === "link").length;
-  const drafts = entries.filter((e) => e.draft).length;
+  const held = STATUSES.slice(1)
+    .map((status) => [status, entries.filter((e) => e.status === status).length])
+    .filter(([, count]) => count > 0)
+    .map(([status, count]) => `${count} ${status}`);
+
   console.log(
     `[content] ${posts} post(s), ${links} link(s) compiled` +
-      (drafts ? ` (${drafts} draft${drafts === 1 ? "" : "s"})` : "") +
+      (held.length ? ` (${held.join(", ")})` : "") +
       ` -> src/generated/entries.ts`,
   );
 }

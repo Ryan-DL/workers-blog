@@ -4,13 +4,14 @@ import { logger } from "hono/logger";
 import { HTTPException } from "hono/http-exception";
 
 import {
-  allPublished,
   getEntry,
-  getPost,
+  getPublishedPost,
   listEntries,
   listTags,
+  publishedEntries,
   publishedPosts,
   relatedEntries,
+  statusCounts,
   summarize,
 } from "./content";
 import { renderRss, renderSitemap } from "./feed";
@@ -63,6 +64,11 @@ app.get("/", (c) =>
       post: "written and hosted here; has markdown/html and readingMinutes",
       link: "published on another site; has url and site, body is commentary",
     },
+    entryStatuses: {
+      published: "in every list, feed, and tag count",
+      preview: "fetchable by slug, absent from all listings — unlisted, not secret",
+      draft: "never served",
+    },
     endpoints: [
       "GET  /api/health",
       "GET  /api/entries?kind=&tag=&q=&limit=&offset=&views=",
@@ -81,12 +87,13 @@ app.get("/", (c) =>
 );
 
 app.get("/api/health", (c) => {
-  const entries = allPublished();
+  const entries = publishedEntries();
   return c.json({
     ok: true,
     entries: entries.length,
     posts: entries.filter((e) => e.kind === "post").length,
     links: entries.filter((e) => e.kind === "link").length,
+    byStatus: statusCounts(),
     timestamp: new Date().toISOString(),
   });
 });
@@ -127,10 +134,19 @@ app.get("/api/entries/:slug", async (c) => {
   const entry = getEntry(slug);
   if (!entry) throw new HTTPException(404, { message: `No entry with slug "${slug}"` });
 
+  // A preview is unlisted, not secret — but ask crawlers to stay out, and give
+  // caches no chance to serve it to someone else after it changes.
+  if (entry.status === "preview") {
+    c.header("X-Robots-Tag", "noindex, nofollow");
+    c.header("Cache-Control", "private, no-store");
+  }
+
   // sourceFile is a build detail; it stays server-side.
   const { sourceFile: _sourceFile, ...body } = entry;
 
-  if (!truthy(c.req.query("views")) || entry.kind !== "post") return c.json(body);
+  if (!truthy(c.req.query("views")) || entry.status !== "published" || entry.kind !== "post") {
+    return c.json(body);
+  }
   return c.json({ ...body, views: await getViews(c.env.DB, slug) });
 });
 
@@ -145,16 +161,23 @@ app.get("/api/entries/:slug/related", (c) => {
 // --- View counts ----------------------------------------------------------
 
 /**
- * View counting applies only to posts hosted here. For a link, the entry
- * exists but the operation doesn't apply — hence 400 rather than 404.
+ * View counting applies only to published posts hosted here. When the entry
+ * exists but the operation doesn't apply to it, that's a 400 rather than a 404
+ * — the caller asked for something real in the wrong way.
  */
-function requirePost(slug: string) {
-  const post = getPost(slug);
+function requirePublishedPost(slug: string) {
+  const post = getPublishedPost(slug);
   if (post) return post;
 
-  if (getEntry(slug)) {
+  const entry = getEntry(slug);
+  if (entry?.kind === "link") {
     throw new HTTPException(400, {
       message: `"${slug}" is an external link, which has no view count`,
+    });
+  }
+  if (entry) {
+    throw new HTTPException(400, {
+      message: `"${slug}" is a preview and is not counted until it's published`,
     });
   }
   throw new HTTPException(404, { message: `No entry with slug "${slug}"` });
@@ -162,7 +185,7 @@ function requirePost(slug: string) {
 
 app.get("/api/entries/:slug/views", async (c) => {
   const slug = c.req.param("slug");
-  requirePost(slug);
+  requirePublishedPost(slug);
 
   return c.json({ slug, views: await getViews(c.env.DB, slug) });
 });
@@ -171,7 +194,7 @@ app.post("/api/entries/:slug/views", async (c) => {
   const slug = c.req.param("slug");
   // Only count reads of posts we actually publish, so the table can't be
   // seeded with arbitrary slugs by anyone who can POST.
-  requirePost(slug);
+  requirePublishedPost(slug);
 
   return c.json({ slug, views: await recordView(c.env.DB, slug) });
 });
@@ -182,7 +205,7 @@ app.get("/api/popular", async (c) => {
 
   // A slug in D1 whose Markdown file was since deleted or drafted is dropped.
   const entries = ranked.flatMap((row) => {
-    const post = getPost(row.slug);
+    const post = getPublishedPost(row.slug);
     return post ? [{ ...summarize(post), views: row.views }] : [];
   });
 
@@ -196,7 +219,7 @@ app.get("/api/tags", (c) => c.json({ tags: listTags() }));
 // --- Feeds ----------------------------------------------------------------
 
 app.get("/feed.xml", (c) =>
-  c.body(renderRss(allPublished(), c.env), 200, {
+  c.body(renderRss(publishedEntries(), c.env), 200, {
     "Content-Type": "application/rss+xml; charset=utf-8",
     "Cache-Control": "public, max-age=3600",
   }),

@@ -9,19 +9,33 @@ import type { Entry, EntryKind, EntrySummary, Post } from "./types";
  * is derived once at module scope, so it costs nothing per request.
  */
 
-/** Published entries only — drafts are never served. */
-const published: readonly Entry[] = ENTRIES.filter((e) => !e.draft);
+/**
+ * Two sets, and the difference between them is the whole preview feature:
+ *
+ * - `servable` — reachable by slug. Published and preview entries.
+ * - `published` — everything else: lists, tags, related, feeds, sitemap.
+ *
+ * A preview entry is therefore fetchable but undiscoverable. Drafts are in
+ * neither set, so they 404 everywhere.
+ */
+const servable: readonly Entry[] = ENTRIES.filter((e) => e.status !== "draft");
+const published: readonly Entry[] = servable.filter((e) => e.status === "published");
 
-const bySlug = new Map<string, Entry>(published.map((e) => [e.slug, e]));
+const bySlug = new Map<string, Entry>(servable.map((e) => [e.slug, e]));
 
+/** Lookup by slug, including preview entries. */
 export function getEntry(slug: string): Entry | undefined {
   return bySlug.get(slug);
 }
 
-/** Narrowed lookup for the endpoints that only make sense on hosted posts. */
-export function getPost(slug: string): Post | undefined {
+/**
+ * Narrowed lookup for endpoints that only make sense on a published post —
+ * view counting. A preview post is deliberately excluded so reads of an
+ * unpublished draft don't inflate its numbers before launch.
+ */
+export function getPublishedPost(slug: string): Post | undefined {
   const entry = bySlug.get(slug);
-  return entry?.kind === "post" ? entry : undefined;
+  return entry?.kind === "post" && entry.status === "published" ? entry : undefined;
 }
 
 export function summarize(entry: Entry): EntrySummary {
@@ -93,7 +107,13 @@ export function listTags(): TagCount[] {
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
-/** Entries sharing the most tags with `slug`, newest-first within the same score. */
+/**
+ * Entries sharing the most tags with `slug`, newest-first within the same score.
+ *
+ * The source entry may be a preview — its own page needs related links — but
+ * candidates are drawn from `published`, so a preview never surfaces as a
+ * related link on a public post.
+ */
 export function relatedEntries(slug: string, limit = 3): EntrySummary[] {
   const entry = bySlug.get(slug);
   if (!entry || entry.tags.length === 0) return [];
@@ -108,12 +128,19 @@ export function relatedEntries(slug: string, limit = 3): EntrySummary[] {
     .map((candidate) => summarize(candidate.entry));
 }
 
-/** The full timeline: posts and links together. */
-export function allPublished(): readonly Entry[] {
+/** The public timeline: published posts and links together. */
+export function publishedEntries(): readonly Entry[] {
   return published;
 }
 
 /** Only the posts hosted here — for the sitemap, which can't claim other sites' URLs. */
 export function publishedPosts(): readonly Post[] {
   return published.filter((e): e is Post => e.kind === "post");
+}
+
+/** Counts for the health endpoint. */
+export function statusCounts(): Record<string, number> {
+  const counts: Record<string, number> = { published: 0, preview: 0, draft: 0 };
+  for (const entry of ENTRIES) counts[entry.status] = (counts[entry.status] ?? 0) + 1;
+  return counts;
 }

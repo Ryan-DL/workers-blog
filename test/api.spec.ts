@@ -7,6 +7,7 @@ beforeEach(resetViews);
 
 interface Summary {
   kind: "post" | "link";
+  status: "published" | "preview" | "draft";
   slug: string;
   title: string;
   date: string;
@@ -32,15 +33,23 @@ describe("meta", () => {
     expect((await res.json<{ endpoints: string[] }>()).endpoints.length).toBeGreaterThan(0);
   });
 
-  it("reports health with a breakdown by kind", async () => {
+  it("reports health with a breakdown by kind and status", async () => {
     const res = await SELF.fetch("https://example.com/api/health");
-    const body = await res.json<{ ok: boolean; entries: number; posts: number; links: number }>();
+    const body = await res.json<{
+      ok: boolean;
+      entries: number;
+      posts: number;
+      links: number;
+      byStatus: Record<string, number>;
+    }>();
 
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
+    // Counts cover published entries only.
     expect(body.posts).toBe(2);
     expect(body.links).toBe(2);
     expect(body.entries).toBe(body.posts + body.links);
+    expect(body.byStatus).toEqual({ published: 4, preview: 1, draft: 1 });
   });
 
   it("404s unknown routes as JSON", async () => {
@@ -68,9 +77,13 @@ describe("GET /api/entries", () => {
     expect(body.entries[0]).not.toHaveProperty("markdown");
   });
 
-  it("excludes drafts", async () => {
+  it("excludes drafts and previews", async () => {
     const body = await list("/api/entries?limit=100");
-    expect(body.entries.map((e) => e.slug)).not.toContain("draft-example");
+    const slugs = body.entries.map((e) => e.slug);
+
+    expect(slugs).not.toContain("draft-example");
+    expect(slugs).not.toContain("preview-example");
+    expect(body.entries.every((e) => e.status === "published")).toBe(true);
   });
 
   it("filters by kind", async () => {
@@ -197,6 +210,99 @@ describe("GET /api/entries/:slug", () => {
       const res = await SELF.fetch(`https://example.com/api/entries/${slug}`);
       expect(res.status).toBe(404);
     }
+  });
+});
+
+describe("preview entries", () => {
+  const PREVIEW = "https://example.com/api/entries/preview-example";
+
+  it("is fetchable by slug and reports its status", async () => {
+    const res = await SELF.fetch(PREVIEW);
+    const entry = await res.json<{ status: string; title: string; html: string }>();
+
+    expect(res.status).toBe(200);
+    expect(entry.status).toBe("preview");
+    expect(entry.title).toBe("A post you can preview but not find");
+    // The front end gets the real rendered body, so the preview looks real.
+    expect(entry.html).toContain("<p>");
+  });
+
+  it("tells crawlers and caches to leave it alone", async () => {
+    const res = await SELF.fetch(PREVIEW);
+
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("sets no such headers on a published post", async () => {
+    const res = await SELF.fetch("https://example.com/api/entries/hello-world");
+
+    expect(res.headers.get("x-robots-tag")).toBeNull();
+    expect(res.headers.get("cache-control")).not.toBe("private, no-store");
+  });
+
+  it("appears in no listing, whatever the filter", async () => {
+    for (const path of [
+      "/api/entries?limit=100",
+      "/api/entries?kind=post&limit=100",
+      "/api/entries?kind=all&limit=100",
+      "/api/posts?limit=100",
+      "/api/entries?tag=meta&limit=100",
+      "/api/entries?q=preview&limit=100",
+    ]) {
+      const body = await list(path);
+      expect(body.entries.map((e) => e.slug), path).not.toContain("preview-example");
+    }
+  });
+
+  it("is not counted in tags", async () => {
+    const res = await SELF.fetch("https://example.com/api/tags");
+    const { tags } = await res.json<{ tags: { tag: string; count: number }[] }>();
+
+    // hello-world is the only published entry tagged "meta".
+    expect(tags.find((t) => t.tag === "meta")?.count).toBe(1);
+  });
+
+  it("never surfaces as a related entry on a published post", async () => {
+    const res = await SELF.fetch("https://example.com/api/entries/hello-world/related?limit=10");
+    const { entries } = await res.json<{ entries: Summary[] }>();
+
+    expect(entries.map((e) => e.slug)).not.toContain("preview-example");
+  });
+
+  it("gets related entries of its own, drawn from published ones", async () => {
+    const res = await SELF.fetch(`${PREVIEW}/related?limit=10`);
+    const { entries } = await res.json<{ entries: Summary[] }>();
+
+    expect(res.status).toBe(200);
+    expect(entries.map((e) => e.slug)).toContain("hello-world");
+    expect(entries.every((e) => e.status === "published")).toBe(true);
+  });
+
+  it("stays out of the feed and the sitemap", async () => {
+    const feed = await (await SELF.fetch("https://example.com/feed.xml")).text();
+    const sitemap = await (await SELF.fetch("https://example.com/sitemap.xml")).text();
+
+    expect(feed).not.toContain("preview-example");
+    expect(feed).not.toContain("A post you can preview but not find");
+    expect(sitemap).not.toContain("preview-example");
+  });
+
+  it("refuses view counting until it's published", async () => {
+    const res = await SELF.fetch(`${PREVIEW}/views`, { method: "POST" });
+
+    expect(res.status).toBe(400);
+    expect((await res.json<{ error: string }>()).error).toContain("preview");
+
+    const { results } = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM post_views",
+    ).all<{ n: number }>();
+    expect(results[0]!.n).toBe(0);
+  });
+
+  it("omits views from its detail response even when asked", async () => {
+    const res = await SELF.fetch(`${PREVIEW}?views=1`);
+    expect(await res.json()).not.toHaveProperty("views");
   });
 });
 
