@@ -11,14 +11,14 @@
   // D1 holds only the dynamic data (view counts). Post content lives in
   // content/posts/*.md and is compiled into the Worker at build time.
   //
-  // `database_id` is a placeholder until you run:
-  //   wrangler d1 create blog-part2-db
-  // then paste the returned id here. Local dev (`wrangler dev`) works without it.
+  // Created with `wrangler d1 create blog-part2-db` (region ENAM). The binding
+  // stays `DB` — that's what the Worker reads as `c.env.DB`, not the name
+  // wrangler suggests when it creates the database.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "blog-part2-db",
-      "database_id": "PLACEHOLDER_RUN_WRANGLER_D1_CREATE"
+      "database_id": "b9663601-08d0-49fa-8376-55f16ef1a5e6"
     }
   ],
 
