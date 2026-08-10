@@ -150,42 +150,6 @@ export function openApiSpec(site: Site): Record<string, unknown> {
           },
         },
       },
-      "/api/entries/{slug}/related": {
-        get: {
-          tags: ["Entries"],
-          summary: "Entries sharing the most tags",
-          description:
-            "Candidates are drawn from published entries only, so a preview never surfaces as a related link.",
-          parameters: [
-            { $ref: "#/components/parameters/Slug" },
-            {
-              name: "limit",
-              in: "query",
-              schema: { type: "integer", minimum: 0, maximum: 10, default: 3 },
-            },
-          ],
-          responses: {
-            "200": {
-              description: "Related entries",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    required: ["entries"],
-                    properties: {
-                      entries: {
-                        type: "array",
-                        items: { $ref: "#/components/schemas/EntrySummary" },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            "404": { $ref: "#/components/responses/NotFound" },
-          },
-        },
-      },
       "/api/entries/{slug}/views": {
         get: {
           tags: ["Views"],

@@ -268,22 +268,6 @@ describe("preview entries", () => {
     expect(tags.find((t) => t.tag === "meta")?.count).toBe(1);
   });
 
-  it("never surfaces as a related entry on a published post", async () => {
-    const res = await SELF.fetch("https://example.com/api/entries/hello-world/related?limit=10");
-    const { entries } = await res.json<{ entries: Summary[] }>();
-
-    expect(entries.map((e) => e.slug)).not.toContain("preview-example");
-  });
-
-  it("gets related entries of its own, drawn from published ones", async () => {
-    const res = await SELF.fetch(`${PREVIEW}/related?limit=10`);
-    const { entries } = await res.json<{ entries: Summary[] }>();
-
-    expect(res.status).toBe(200);
-    expect(entries.map((e) => e.slug)).toContain("hello-world");
-    expect(entries.every((e) => e.status === "published")).toBe(true);
-  });
-
   it("stays out of the feed and the sitemap", async () => {
     const feed = await (await SELF.fetch("https://example.com/feed.xml")).text();
     const sitemap = await (await SELF.fetch("https://example.com/sitemap.xml")).text();
@@ -373,7 +357,7 @@ describe("view counts", () => {
   });
 });
 
-describe("tags and related entries", () => {
+describe("tags", () => {
   it("counts tags across both kinds, most-used first", async () => {
     const res = await SELF.fetch("https://example.com/api/tags");
     const { tags } = await res.json<{ tags: { tag: string; count: number }[] }>();
@@ -385,18 +369,6 @@ describe("tags and related entries", () => {
     expect(tags.find((t) => t.tag === "meta")?.count).toBe(1);
   });
 
-  it("relates posts to links through shared tags", async () => {
-    const res = await SELF.fetch("https://example.com/api/entries/why-workers/related?limit=10");
-    const { entries } = await res.json<{ entries: Summary[] }>();
-
-    expect(entries.map((e) => e.slug)).toContain("guest-post-on-edge-caching");
-    expect(entries.map((e) => e.slug)).not.toContain("why-workers");
-  });
-
-  it("404s related for unknown slugs", async () => {
-    const res = await SELF.fetch("https://example.com/api/entries/nope/related");
-    expect(res.status).toBe(404);
-  });
 });
 
 describe("feeds", () => {

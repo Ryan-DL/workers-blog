@@ -123,10 +123,23 @@ describe("/docs", () => {
     expect(body).toContain("/openapi.json");
   });
 
-  it("carries the same pre-paint theme script as the rest of the site", async () => {
+  // Swagger UI ships light-only, so /docs opts out of the site's theming
+  // rather than carrying a hand-maintained dark palette for someone else's DOM.
+  it("is pinned to light, whatever the visitor's theme", async () => {
     const body = await (await SELF.fetch("https://example.com/docs")).text();
 
-    expect(body).toContain('localStorage.getItem("theme")');
-    expect(body).toContain('class="theme-toggle"');
+    expect(body).toContain('<html lang="en" data-theme="light">');
+    // Nothing that could move it off light: no stored-choice bootstrap, no
+    // toggle, and not theme.js — which follows the OS while no choice is stored.
+    expect(body).not.toContain("localStorage");
+    expect(body).not.toContain("data-theme-toggle");
+    expect(body).not.toContain('src="/theme.js"');
+  });
+
+  it("still reads the site's own tokens for its header strip", async () => {
+    const body = await (await SELF.fetch("https://example.com/docs")).text();
+
+    expect(body).toContain('href="/styles.css"');
+    expect(body).toContain("bg-canvas");
   });
 });

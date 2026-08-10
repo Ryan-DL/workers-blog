@@ -1,0 +1,201 @@
+/*
+ * Tailwind entry point.
+ *
+ * `npm run css:build` compiles this to public/styles.css, which is what the
+ * pages actually link. The output is generated and gitignored — edit this file,
+ * never the one in public/.
+ *
+ * Almost everything the site looks like lives as utility classes in
+ * src/views/*.ts. What's left here is the part utilities can't express: the
+ * design tokens themselves, the rule for which palette is in effect, and the
+ * handful of styles that land on HTML we don't author (rendered Markdown).
+ */
+
+@import "tailwindcss" source(none);
+
+/* Explicit, so the scanner never depends on cwd — and so it skips the
+   generated entry module, whose rendered Markdown is full of English words
+   that happen to also be utility names ("block", "table", "hidden"). */
+@source "./**/*.ts";
+@source not "./generated/**";
+
+@plugin "@tailwindcss/typography";
+
+/*
+ * `dark:` and `light:` key off the [data-theme] attribute rather than
+ * prefers-color-scheme, because an explicit choice by the visitor has to be
+ * able to beat the OS. The attribute is set before first paint by
+ * THEME_BOOTSTRAP in src/views/layout.ts.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
+/*
+ * Design tokens.
+ *
+ * These are real CSS custom properties, so `bg-canvas` compiles to
+ * `background-color: var(--color-canvas)` and a theme flip is a variable swap
+ * rather than a second copy of every rule under a `dark:` variant. The values
+ * here are the DARK palette: dark is what you get by default, before any
+ * JavaScript runs and if it never runs at all.
+ */
+@theme {
+  --color-canvas: #0c0f14;
+  --color-surface: #131820;
+  --color-sunken: #090b0f;
+  --color-ink: #e8ecf1;
+  --color-ink-dim: #96a1b0;
+  --color-ink-faint: #6b7684;
+  --color-line: #1f2731;
+  --color-line-strong: #2c3744;
+  --color-accent: #6cc7f5;
+  --color-accent-soft: #1a3a4d;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Body copy runs a shade larger than Tailwind's 16px default. */
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.65;
+
+  /* `max-w-page` is the shell; `max-w-measure` is a comfortable line length. */
+  --container-page: 46rem;
+  --container-measure: 68ch;
+
+  --radius-card: 0.625rem;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+}
+
+/*
+ * The light palette, and the rule for when it applies.
+ *
+ * Two blocks, not three: outside the media query nothing has overridden the
+ * dark defaults above, so only an explicit `light` needs handling. Inside it,
+ * `:not([data-theme="dark"])` covers both "no choice stored" and "chose light"
+ * while still letting someone who picked dark keep it on a light-mode OS.
+ *
+ * Worth knowing: browsers report `prefers-color-scheme: light` when the OS has
+ * no preference set at all, so "unconfigured" and "prefers light" are the same
+ * case here. Dark wins every other path. To make dark win even over an explicit
+ * light preference, delete the @media block — the [data-theme] one is what the
+ * toggle uses.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --color-canvas: #fdfdfc;
+    --color-surface: #ffffff;
+    --color-sunken: #f4f4f2;
+    --color-ink: #16191d;
+    --color-ink-dim: #56606c;
+    --color-ink-faint: #858e99;
+    --color-line: #e4e4e0;
+    --color-line-strong: #d0d0ca;
+    --color-accent: #0b6c99;
+    --color-accent-soft: #e2f1f9;
+    --shadow-card: 0 1px 2px rgb(16 20 26 / 0.05), 0 8px 24px -12px rgb(16 20 26 / 0.15);
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --color-canvas: #fdfdfc;
+  --color-surface: #ffffff;
+  --color-sunken: #f4f4f2;
+  --color-ink: #16191d;
+  --color-ink-dim: #56606c;
+  --color-ink-faint: #858e99;
+  --color-line: #e4e4e0;
+  --color-line-strong: #d0d0ca;
+  --color-accent: #0b6c99;
+  --color-accent-soft: #e2f1f9;
+  --shadow-card: 0 1px 2px rgb(16 20 26 / 0.05), 0 8px 24px -12px rgb(16 20 26 / 0.15);
+  color-scheme: light;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  /* So overscroll past the top or bottom of the page isn't a white flash. */
+  html {
+    background-color: var(--color-canvas);
+  }
+
+  /* A visible focus ring everywhere, rather than one utility per element. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  /*
+   * Preflight strips link styling down to `color: inherit`. Putting it back
+   * here rather than as a utility means a link written inline in a sentence —
+   * in an empty state, the 404, the colophon — is legible without anyone
+   * having to remember. Anything that shouldn't look like a link says so with
+   * `no-underline` and a `text-*` utility, which win as utilities outrank base.
+   */
+  a {
+    color: var(--color-accent);
+    text-decoration-line: underline;
+    text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    text-underline-offset: 3px;
+  }
+
+  a:hover {
+    text-decoration-color: currentcolor;
+  }
+}
+
+/*
+ * Rendered Markdown.
+ *
+ * Post bodies are HTML produced by `marked` at build time, so there is no
+ * markup to hang utilities on — this is what @tailwindcss/typography exists
+ * for. Pointing its variables at our tokens means prose follows the palette on
+ * its own; there's no `dark:prose-invert`, which would break for a visitor with
+ * no JavaScript and therefore no [data-theme] attribute.
+ *
+ * Unlayered on purpose: this has to beat the plugin's own layered defaults.
+ * Per-element shaping (the inline-code box) rides along as `prose-code:`
+ * modifiers in src/views/pages.ts.
+ */
+.prose {
+  --tw-prose-body: var(--color-ink);
+  --tw-prose-headings: var(--color-ink);
+  --tw-prose-lead: var(--color-ink-dim);
+  --tw-prose-links: var(--color-accent);
+  --tw-prose-bold: var(--color-ink);
+  --tw-prose-counters: var(--color-ink-faint);
+  --tw-prose-bullets: var(--color-line-strong);
+  --tw-prose-hr: var(--color-line);
+  --tw-prose-quotes: var(--color-ink-dim);
+  --tw-prose-quote-borders: var(--color-line-strong);
+  --tw-prose-captions: var(--color-ink-faint);
+  --tw-prose-code: var(--color-ink);
+  --tw-prose-pre-code: var(--color-ink);
+  --tw-prose-pre-bg: var(--color-sunken);
+  --tw-prose-th-borders: var(--color-line);
+  --tw-prose-td-borders: var(--color-line);
+}
+
+/*
+ * A fenced block is already one box — don't draw another around every line
+ * inside it. This is the counterpart to the `prose-code:` modifiers on the
+ * wrapper in src/views/pages.ts; it lives here because the `[&_pre_code]:`
+ * variant that would express it in markup renders as `&amp;` in the class
+ * attribute, which is correct but reads like a bug.
+ */
+.prose :where(pre code) {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+/* A wide table shouldn't push the page sideways. */
+.prose :where(table) {
+  display: block;
+  overflow-x: auto;
+}

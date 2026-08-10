@@ -11,7 +11,7 @@ import type { BlogConfig } from "./src/config";
  * `npm run typecheck` will tell you if you mistype a key.
  */
 export default {
-  title: "blog-part2",
+  title: "Point of Presence — Ryan De Lap",
   description: "A blog on Cloudflare Workers",
 
   // Leave empty to derive every absolute URL from the incoming request — right
@@ -22,7 +22,7 @@ export default {
   language: "en",
 
   author: {
-    name: "Ryan",
+    name: "Ryan De Lap",
     tagline: "Engineer. I write about the edge, databases, and things that surprised me.",
     bio: [
       "This is placeholder copy. Replace it with your own — each string in this array becomes a paragraph on the about page.",

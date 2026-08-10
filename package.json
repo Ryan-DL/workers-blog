@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "content:build": "node scripts/build-content.mjs",
-    "dev": "npm run content:build && wrangler dev",
-    "deploy": "npm run content:build && wrangler deploy",
-    "test": "npm run content:build && vitest run",
-    "test:watch": "npm run content:build && vitest",
-    "typecheck": "npm run content:build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
+    "fixtures:build": "node scripts/build-content.mjs --source test/fixtures --out test/generated",
+    "css:build": "tailwindcss --input ./src/styles.css --output ./public/styles.css --minify",
+    "css:watch": "tailwindcss --input ./src/styles.css --output ./public/styles.css --watch",
+    "build": "npm run content:build && npm run css:build",
+    "dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "npm run build && npm run fixtures:build && vitest run",
+    "test:watch": "npm run build && npm run fixtures:build && vitest",
+    "typecheck": "npm run content:build && npm run fixtures:build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
     "db:apply:local": "wrangler d1 execute blog-part2-db --local --file=./src/db/schema.sql",
     "db:apply:remote": "wrangler d1 execute blog-part2-db --remote --file=./src/db/schema.sql",
     "cf-typegen": "wrangler types"
@@ -19,9 +23,12 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.20.3",
+    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/typography": "^0.5.20",
     "@types/node": "^26.2.0",
     "gray-matter": "^4.0.3",
     "marked": "^18.0.9",
+    "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
     "wrangler": "^4.120.0"

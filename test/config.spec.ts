@@ -146,7 +146,7 @@ describe("config reaches the rendered site", () => {
 
   it("renders only the socials that are filled in", async () => {
     const body = await (await SELF.fetch("https://example.com/")).text();
-    const footer = body.slice(body.indexOf('class="socials"'));
+    const footer = body.slice(body.indexOf("data-socials"));
 
     // blog.config.ts ships with github set and the rest blank.
     expect(footer).toContain("github.com");

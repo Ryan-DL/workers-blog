@@ -13,6 +13,35 @@ export function formatDate(iso: string): string {
   return DATE_FORMAT.format(new Date(iso));
 }
 
+/**
+ * Rendered Markdown.
+ *
+ * A post body is HTML produced by `marked` at build time, so there is nowhere
+ * to put a class — @tailwindcss/typography styles it by descendant selector
+ * instead. Colours come from the `--tw-prose-*` variables set in
+ * src/styles.css, so prose follows the palette on its own; what's left is the
+ * per-element shaping, which rides along as `prose-*:` modifiers here.
+ */
+const PROSE = [
+  "prose max-w-measure",
+  // Inline code as a boxed token, minus typography's decorative backticks.
+  "prose-code:rounded-[5px] prose-code:border prose-code:border-line prose-code:bg-surface",
+  "prose-code:px-1.5 prose-code:py-0.5 prose-code:font-normal",
+  "prose-code:before:content-none prose-code:after:content-none",
+  // (The matching `pre code` reset is in src/styles.css — see the note there.)
+  "prose-pre:rounded-card prose-pre:border prose-pre:border-line",
+].join(" ");
+
+/** Shared by the two flavours of badge, which differ only in colour. */
+const BADGE_SHAPE = "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[0.7rem]";
+const BADGE = `${BADGE_SHAPE} border-line-strong text-ink-dim`;
+const BADGE_LINK = `${BADGE_SHAPE} border-accent-soft bg-accent-soft text-accent`;
+
+const META_ROW = "mb-1.5 flex flex-wrap items-center gap-2.5 font-mono text-xs text-ink-faint";
+const TAG_ROW = "mt-10 flex flex-wrap gap-1.5";
+const TAG =
+  "rounded-full border border-line bg-surface px-2.5 py-0.5 font-mono text-xs text-ink-dim no-underline hover:border-line-strong hover:text-ink";
+
 /** Where an entry points: a link leaves the site, a post doesn't. */
 function hrefFor(entry: EntrySummary): string {
   return entry.kind === "link" ? entry.url : `/posts/${entry.slug}`;
@@ -22,64 +51,81 @@ function hrefFor(entry: EntrySummary): string {
  * One row in the timeline.
  *
  * A post links to its own page; a link goes straight off-site, with an arrow
- * and its source named, so nobody clicks expecting to stay.
+ * and its source named, so nobody clicks expecting to stay. The arrow leans
+ * away on hover via `group-hover:`, which is why the anchor carries `group`.
  */
 function entryRow(entry: EntrySummary): Html {
   const isLink = entry.kind === "link";
 
-  return html`<li class="entry">
-    <div class="entry-meta">
+  return html`<li class="border-b border-line py-6 last:border-b-0">
+    <div class="${META_ROW}">
       <time datetime="${entry.date}">${formatDate(entry.date)}</time>
       ${entry.kind === "link"
-        ? html`<span class="badge badge-link">${entry.site}</span>`
-        : html`<span class="badge">${entry.readingMinutes} min</span>`}
+        ? html`<span class="${BADGE_LINK}">${entry.site}</span>`
+        : html`<span class="${BADGE}">${entry.readingMinutes} min</span>`}
     </div>
-    <h2 class="entry-title">
-      <a href="${hrefFor(entry)}" ${isLink ? raw('target="_blank" rel="noopener"') : ""}
+    <h2 class="mb-1.5 text-[1.15rem] leading-snug font-semibold tracking-[-0.015em]">
+      <a
+        href="${hrefFor(entry)}"
+        class="group text-ink no-underline hover:text-accent"
+        ${isLink ? raw('target="_blank" rel="noopener"') : ""}
         >${entry.title}${isLink
-          ? html`<span class="external-arrow" aria-hidden="true">↗</span>`
+          ? html`<span
+              class="ml-0.5 inline-block -translate-y-px text-[0.85em] text-ink-faint transition group-hover:translate-x-0.5 group-hover:-translate-y-[3px] group-hover:text-accent motion-reduce:transition-none"
+              aria-hidden="true"
+              >↗</span
+            >`
           : ""}</a
       >
     </h2>
-    ${entry.excerpt ? html`<p class="entry-excerpt">${entry.excerpt}</p>` : ""}
+    ${entry.excerpt
+      ? html`<p class="max-w-measure text-[0.95rem] text-ink-dim">${entry.excerpt}</p>`
+      : ""}
   </li>`;
 }
 
 function timeline(entries: EntrySummary[], emptyMessage: Html): Html {
   return entries.length === 0
-    ? html`<p class="empty">${emptyMessage}</p>`
-    : html`<ul class="timeline">
+    ? html`<p class="py-12 text-center text-ink-dim">${emptyMessage}</p>`
+    : html`<ul>
         ${entries.map(entryRow)}
       </ul>`;
 }
 
 export function homePage(entries: EntrySummary[], site: Site): Html {
-  return html`<section class="intro">
-      <h1>${site.title}</h1>
-      <p>${site.description}</p>
+  return html`<section class="mb-4 border-b border-line pb-10">
+      <h1 class="mb-2.5 text-[1.9rem] font-bold leading-[1.2] tracking-[-0.025em]">${site.title}</h1>
+      <p class="max-w-measure text-ink-dim">${site.description}</p>
     </section>
 
     ${timeline(entries, html`Nothing published yet.`)}`;
 }
 
 export function tagPage(tag: string, entries: EntrySummary[]): Html {
-  return html`<section class="intro">
-      <h1>Tagged “${tag}”</h1>
-      <p>${entries.length} ${entries.length === 1 ? "entry" : "entries"}.</p>
+  return html`<section class="mb-4 border-b border-line pb-10">
+      <h1 class="mb-2.5 text-[1.9rem] font-bold leading-[1.2] tracking-[-0.025em]">
+        Tagged “${tag}”
+      </h1>
+      <p class="max-w-measure text-ink-dim">
+        ${entries.length} ${entries.length === 1 ? "entry" : "entries"}.
+      </p>
     </section>
 
     ${timeline(entries, html`Nothing here. <a href="/">Back to writing</a>.`)}`;
 }
 
-export function entryPage(entry: Entry, related: EntrySummary[]): Html {
+export function entryPage(entry: Entry, recent: EntrySummary[]): Html {
   const isLink = entry.kind === "link";
   // Only a published post gets a view ping; the server rejects anything else.
   const countable = entry.status === "published" && !isLink;
 
   return html`<article ${countable ? raw(`data-view-slug="${entry.slug}"`) : ""}>
       ${entry.status === "preview"
-        ? html`<div class="preview-banner">
-            <strong>Preview.</strong>
+        ? html`<div
+            data-preview-banner
+            class="mb-8 flex gap-2.5 rounded-card border border-dashed border-line-strong bg-surface px-4 py-3 text-[0.85rem] text-ink-dim"
+          >
+            <strong class="text-ink">Preview.</strong>
             <span>
               This entry isn’t published — it appears in no list, feed, or search
               engine. Anyone with the link can read it.
@@ -87,48 +133,64 @@ export function entryPage(entry: Entry, related: EntrySummary[]): Html {
           </div>`
         : ""}
 
-      <header class="entry-header">
-        <div class="entry-meta">
+      <header class="mb-8 border-b border-line pb-6">
+        <div class="${META_ROW}">
           <time datetime="${entry.date}">${formatDate(entry.date)}</time>
           ${entry.kind === "link"
-            ? html`<span class="badge badge-link">${entry.site}</span>`
-            : html`<span class="badge">${entry.readingMinutes} min read</span>`}
+            ? html`<span class="${BADGE_LINK}">${entry.site}</span>`
+            : html`<span class="${BADGE}">${entry.readingMinutes} min read</span>`}
           ${entry.author ? html`<span>${entry.author}</span>` : ""}
-          ${countable ? html`<span class="view-count" data-view-count></span>` : ""}
+          ${countable ? html`<span class="tabular-nums" data-view-count></span>` : ""}
         </div>
-        <h1>${entry.title}</h1>
+        <h1 class="mt-2 mb-3 text-[2rem] font-bold leading-[1.18] tracking-[-0.03em]">
+          ${entry.title}
+        </h1>
         ${entry.updated
-          ? html`<p class="entry-excerpt">Updated ${formatDate(entry.updated)}.</p>`
+          ? html`<p class="text-[0.95rem] text-ink-dim">Updated ${formatDate(entry.updated)}.</p>`
           : ""}
       </header>
 
       ${entry.kind === "link"
-        ? html`<a class="callout-link" href="${entry.url}" target="_blank" rel="noopener">
-            <strong>Read it on ${entry.site} ↗</strong>
-            <span>${entry.url}</span>
+        ? html`<a
+            data-callout
+            class="mb-8 block rounded-card border border-l-[3px] border-line border-l-accent bg-surface px-[1.15rem] py-4 no-underline"
+            href="${entry.url}"
+            target="_blank"
+            rel="noopener"
+          >
+            <strong class="mb-0.5 block text-ink">Read it on ${entry.site} ↗</strong>
+            <span class="block font-mono text-[0.78rem] break-all text-ink-dim">${entry.url}</span>
           </a>`
         : ""}
 
       <!-- Already rendered and sanitised at build time from your own Markdown. -->
-      ${entry.html ? html`<div class="prose">${raw(entry.html)}</div>` : ""}
+      ${entry.html ? html`<div class="${PROSE}">${raw(entry.html)}</div>` : ""}
 
       ${entry.tags.length > 0
-        ? html`<div class="tag-row">
+        ? html`<div class="${TAG_ROW}">
             ${entry.tags.map(
-              (tag) => html`<a class="tag" href="/tags/${encodeURIComponent(tag)}">#${tag}</a>`,
+              (tag) => html`<a class="${TAG}" href="/tags/${encodeURIComponent(tag)}">#${tag}</a>`,
             )}
           </div>`
         : ""}
     </article>
 
-    ${related.length > 0
-      ? html`<aside class="related">
-          <h2>Related</h2>
-          <ul>
-            ${related.map(
-              (item) => html`<li>
+    ${recent.length > 0
+      ? html`<aside data-recent class="mt-14 border-t border-line pt-7">
+          <h2
+            class="mb-4 font-mono text-[0.78rem] font-semibold tracking-[0.06em] text-ink-faint uppercase"
+          >
+            Recent
+          </h2>
+          <ul class="grid gap-3">
+            ${recent.map(
+              (item) => html`<li class="flex flex-wrap items-baseline gap-x-3">
+                <time class="font-mono text-xs text-ink-faint" datetime="${item.date}"
+                  >${formatDate(item.date)}</time
+                >
                 <a
                   href="${hrefFor(item)}"
+                  class="text-[0.95rem] text-ink no-underline hover:text-accent"
                   ${item.kind === "link" ? raw('target="_blank" rel="noopener"') : ""}
                   >${item.title}${item.kind === "link" ? " ↗" : ""}</a
                 >
@@ -144,33 +206,44 @@ export function aboutPage(site: Site): Html {
   // The stock avatar ships with the template; say so rather than passing it off.
   const isPlaceholder = author.avatar === "/avatar.svg";
 
-  return html`<div class="about-head">
-      <img class="avatar" src="${author.avatar}" alt="${author.avatarAlt}" width="96" height="96" />
+  return html`<div class="mb-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-6">
+      <img
+        class="size-24 shrink-0 rounded-full border border-line-strong bg-surface object-cover"
+        src="${author.avatar}"
+        alt="${author.avatarAlt}"
+        width="96"
+        height="96"
+      />
       <div>
-        <h1>${author.name}</h1>
-        <p>${author.tagline}</p>
-        ${isPlaceholder ? html`<span class="placeholder-note">placeholder photo</span>` : ""}
+        <h1 class="mb-1.5 text-[1.7rem] font-bold tracking-[-0.025em]">${author.name}</h1>
+        <p class="text-[0.95rem] text-ink-dim">${author.tagline}</p>
+        ${isPlaceholder
+          ? html`<span
+              class="mt-2.5 inline-block rounded-full border border-dashed border-line-strong px-2 py-0.5 font-mono text-[0.68rem] text-ink-faint"
+              >placeholder photo</span
+            >`
+          : ""}
       </div>
     </div>
 
-    <div class="prose">${author.bio.map((paragraph) => html`<p>${paragraph}</p>`)}</div>
+    <div class="${PROSE}">${author.bio.map((paragraph) => html`<p>${paragraph}</p>`)}</div>
 
     ${site.socials.length > 0
-      ? html`<div class="tag-row">
+      ? html`<div class="${TAG_ROW}">
           ${site.socials
             .filter((social) => !social.href.startsWith("/"))
             .map(
               (social) =>
-                html`<a class="tag" href="${social.href}" rel="me noopener">${social.label}</a>`,
+                html`<a class="${TAG}" href="${social.href}" rel="me noopener">${social.label}</a>`,
             )}
         </div>`
       : ""}`;
 }
 
 export function notFoundPage(): Html {
-  return html`<div class="error-page">
-    <h1>404</h1>
-    <p>That page doesn’t exist.</p>
-    <p><a href="/">Back to writing</a></p>
+  return html`<div class="py-16 text-center">
+    <h1 class="mb-2 font-mono text-5xl font-bold text-ink-faint">404</h1>
+    <p class="text-ink-dim">That page doesn’t exist.</p>
+    <p class="mt-4"><a href="/">Back to writing</a></p>
   </div>`;
 }

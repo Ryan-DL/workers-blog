@@ -13,7 +13,7 @@ import type { Entry, EntryKind, EntrySummary, Post } from "./types";
  * Two sets, and the difference between them is the whole preview feature:
  *
  * - `servable` — reachable by slug. Published and preview entries.
- * - `published` — everything else: lists, tags, related, feeds, sitemap.
+ * - `published` — everything else: lists, tags, feeds, sitemap.
  *
  * A preview entry is therefore fetchable but undiscoverable. Drafts are in
  * neither set, so they 404 everywhere.
@@ -108,24 +108,17 @@ export function listTags(): TagCount[] {
 }
 
 /**
- * Entries sharing the most tags with `slug`, newest-first within the same score.
+ * The newest entries, minus the one currently being read.
  *
- * The source entry may be a preview — its own page needs related links — but
- * candidates are drawn from `published`, so a preview never surfaces as a
- * related link on a public post.
+ * Candidates come from `published`, so a preview never appears at the foot of
+ * a public post. `published` is already newest-first, so this is a filter and a
+ * slice — there's nothing to sort.
  */
-export function relatedEntries(slug: string, limit = 3): EntrySummary[] {
-  const entry = bySlug.get(slug);
-  if (!entry || entry.tags.length === 0) return [];
-
-  const tags = new Set(entry.tags.map((t) => t.toLowerCase()));
+export function recentEntries(excludeSlug: string, limit = 4): EntrySummary[] {
   return published
-    .filter((e) => e.slug !== slug)
-    .map((e) => ({ entry: e, score: e.tags.filter((t) => tags.has(t.toLowerCase())).length }))
-    .filter((candidate) => candidate.score > 0)
-    .sort((a, b) => b.score - a.score || b.entry.date.localeCompare(a.entry.date))
+    .filter((e) => e.slug !== excludeSlug)
     .slice(0, limit)
-    .map((candidate) => summarize(candidate.entry));
+    .map(summarize);
 }
 
 /** The public timeline: published posts and links together. */

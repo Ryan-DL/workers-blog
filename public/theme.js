@@ -24,7 +24,9 @@
 
   function apply(theme) {
     root.dataset.theme = theme;
-    var button = document.querySelector(".theme-toggle");
+    // A data attribute, not a class: the button's classes are Tailwind
+    // utilities and change whenever it's restyled.
+    var button = document.querySelector("[data-theme-toggle]");
     if (button) {
       button.setAttribute("aria-label", "Switch to " + (theme === "dark" ? "light" : "dark") + " theme");
       button.setAttribute("aria-pressed", String(theme === "dark"));
@@ -34,7 +36,7 @@
   apply(root.dataset.theme || "dark");
 
   document.addEventListener("click", function (event) {
-    var button = event.target.closest(".theme-toggle");
+    var button = event.target.closest("[data-theme-toggle]");
     if (!button) return;
 
     var next = root.dataset.theme === "dark" ? "light" : "dark";

@@ -10,7 +10,7 @@ import {
   listTags,
   publishedEntries,
   publishedPosts,
-  relatedEntries,
+  recentEntries,
   statusCounts,
   summarize,
 } from "./content";
@@ -128,7 +128,7 @@ app.get("/posts/:slug", (c) => {
         path: `/posts/${entry.slug}`,
         noindex: entry.status === "preview",
       },
-      entryPage(entry, relatedEntries(slug, 4)),
+      entryPage(entry, recentEntries(slug, 4)),
       siteOf(c),
     ),
   );
@@ -183,7 +183,6 @@ app.get("/api", (c) => {
       "GET  /api/posts   (alias for kind=post)",
       "GET  /api/links   (alias for kind=link)",
       "GET  /api/entries/:slug?views=",
-      "GET  /api/entries/:slug/related",
       "GET  /api/entries/:slug/views   (published posts only)",
       "POST /api/entries/:slug/views   (published posts only)",
       "GET  /api/tags",
@@ -256,14 +255,6 @@ app.get("/api/entries/:slug", async (c) => {
     return c.json(body);
   }
   return c.json({ ...body, views: await getViews(c.env.DB, slug) });
-});
-
-app.get("/api/entries/:slug/related", (c) => {
-  const slug = c.req.param("slug");
-  if (!getEntry(slug)) throw new HTTPException(404, { message: `No entry with slug "${slug}"` });
-
-  const limit = intParam(c.req.query("limit"), 3, 10);
-  return c.json({ entries: relatedEntries(slug, limit) });
 });
 
 // --- View counts ----------------------------------------------------------

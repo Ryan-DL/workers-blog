@@ -80,7 +80,7 @@ Every entry also carries a `status`, which decides where it shows up:
 
 `preview` is the state for "not published, but I want to look at it". The front
 end can render it exactly as it will appear once live, and you can send someone
-the link — but it appears in no list, feed, tag count, related result, or
+the link — but it appears in no list, feed, tag count, Recent list, or
 sitemap, so nobody stumbles onto it.
 
 **A preview is unlisted, not protected.** Anyone who knows or guesses the slug
@@ -107,17 +107,37 @@ build time**, in Node, and writes `src/generated/entries.ts`. So `gray-matter`
 and `marked` never ship to the edge, cold starts don't parse anything, and a
 malformed entry fails the build instead of a request.
 
+The same compiler runs twice, over two directories:
+
+| Source | Output | Used by |
+| --- | --- | --- |
+| `content/` | `src/generated/` | The site — whatever you've actually written |
+| `test/fixtures/` | `test/generated/` | The tests — a fixed cast of entries |
+
+That split matters more than it looks. The tests are integration tests against a
+real Worker, and they assert on real numbers — `total` is 4, `posts` is 2, the
+`cloudflare` tag has 4 entries. Pointed at `content/`, **every post you publish
+would break the suite**, and the pressure would be to delete the assertions
+until nothing was checked. Pointed at `test/fixtures/`, the cast never changes:
+a draft, a preview, two hosted posts, and two external links, which between them
+exercise every rule in [Publication status](#publication-status).
+
+`vitest.config.ts` aliases the one import that decides which set is in play, so
+nothing in `src/` knows the difference.
+
 ## Getting started
 
 ```bash
 npm install
-npm run content:build          # compile content/ -> src/generated/entries.ts
+npm run build                  # content/ -> src/generated/, Tailwind -> public/styles.css
 npm run db:apply:local         # create post_views in the local D1
 npm run dev                    # http://localhost:8787
 ```
 
-`npm run dev`, `deploy`, `test`, and `typecheck` all run `content:build` first,
-so the generated module is never stale.
+`npm run dev`, `deploy`, and `test` run `build` first, and `typecheck` runs
+`content:build`, so nothing generated is ever stale. While iterating on styles,
+run `npm run css:watch` next to `npm run dev` — the Worker restarts on its own
+when the source changes, but the stylesheet is compiled ahead of it.
 
 ## Writing a post
 
@@ -180,7 +200,6 @@ Everything returns `entries` — a mixed list unless you narrow it by kind.
 | GET | `/api/posts` | Alias for `?kind=post` |
 | GET | `/api/links` | Alias for `?kind=link` |
 | GET | `/api/entries/:slug` | Full entry incl. `markdown` and `html`; `?views=1` |
-| GET | `/api/entries/:slug/related` | Entries sharing the most tags; `?limit=` |
 | GET | `/api/entries/:slug/views` | Posts only |
 | POST | `/api/entries/:slug/views` | Posts only; atomic increment |
 | GET | `/api/tags` | Tags with counts across both kinds, most-used first |
@@ -221,6 +240,33 @@ hydration, no loading state.
 | `/tags/:tag` | Everything under one tag |
 | `/docs` | Swagger UI over the API |
 
+### Styling
+
+**Tailwind CSS v4.** `src/styles.css` is the entry point and `npm run css:build`
+compiles it to `public/styles.css`, which is what the pages link. The output is
+generated and gitignored — edit the source, never the file in `public/`.
+
+Almost all of the design lives as utility classes in `src/views/*.ts`. What's
+left in `src/styles.css` is the part utilities can't express:
+
+| | Why it's CSS and not a class |
+| --- | --- |
+| `@theme` tokens | The palette, fonts, and page widths every utility is built from |
+| The light-palette blocks | Which theme is in effect isn't a property of any one element |
+| A base layer | Link and focus-ring defaults, so a link written mid-sentence is legible without anyone remembering a class |
+| `.prose` variables | Post bodies are HTML from `marked`; there's no markup to hang a class on |
+
+Colours are **semantic, not literal** — `bg-canvas`, `text-ink-dim`,
+`border-line`, `text-accent`. Each compiles to `var(--color-…)`, so switching
+theme swaps ten variables rather than duplicating every rule under a `dark:`
+variant. That is also why rendered Markdown doesn't need `dark:prose-invert`,
+which would break for a visitor with no JavaScript.
+
+Tailwind scans `src/**/*.ts` for class names — including inside the `html`
+template literals — and emits only what it finds. `src/generated/` is excluded
+on purpose: it's rendered Markdown, and prose full of words like "block",
+"table", and "hidden" would otherwise generate CSS nobody asked for.
+
 ### Theme
 
 Dark by default, with a toggle in the header. Precedence is: the visitor's
@@ -229,15 +275,25 @@ resolved by a small inline script in `<head>` so there's no flash of the wrong
 palette before the page paints; `public/theme.js` only handles the toggle
 afterwards.
 
+That script sets `data-theme` on `<html>`, and `src/styles.css` declares
+`dark:` and `light:` as custom variants keyed off that attribute rather than off
+`prefers-color-scheme`. It has to work that way: an explicit choice by the
+visitor must be able to beat the OS, and a media query can't be overridden by
+one.
+
 One nuance worth knowing: browsers report `prefers-color-scheme: light` when the
 OS has no preference set at all, so "no configuration" is indistinguishable from
 "prefers light" in CSS. Dark is the fallback for every other path — no
 JavaScript, an unsupported browser, a thrown error. To make dark win even over
 an explicit light preference, drop the `@media (prefers-color-scheme: light)`
-block in `public/styles.css` and the `matchMedia` call in the bootstrap.
+block in `src/styles.css` and the `matchMedia` call in the bootstrap.
 
-Palette lives in `public/styles.css` as tokens on `:root` — dark values are the
-defaults, light is the override.
+### Hooks
+
+Anything JavaScript or a test needs to find uses a `data-` attribute —
+`data-theme-toggle`, `data-view-slug`, `data-socials`, `data-recent`. Utility
+classes describe how something looks and change whenever it's restyled, so
+they're the wrong thing to query or assert on.
 
 ## Going live
 
@@ -263,21 +319,23 @@ domain, and no CORS between the front end and the API.
 blog.config.ts            everything about the site that isn't a post
 content/posts/*.md        posts hosted here
 content/links/*.md        links to posts published elsewhere
-scripts/build-content.mjs build-time Markdown -> src/generated/entries.ts
+scripts/build-content.mjs build-time Markdown -> a generated entries module
 src/index.ts              Hono app: pages, API, feeds
 src/config.ts             config types, social registry, resolution
 src/content.ts            queries over the compiled entries
 src/views.ts              D1 view counting
 src/feed.ts               RSS + sitemap
 src/openapi.ts            the OpenAPI document
-src/views/                HTML templates
+src/views/                HTML templates, styled with Tailwind utilities
+src/styles.css            Tailwind entry: design tokens, theme rule, prose
 src/db/schema.sql         D1 schema
-public/                   styles.css, theme.js, avatar.svg, favicon.svg
+public/                   theme.js, avatar.svg, favicon.svg (+ compiled styles.css)
 test/                     integration tests against a real Worker + D1
+test/fixtures/            the entries those tests run against, not the site's
 ```
 
-`src/generated/` is gitignored — it's wiped and rebuilt from the Markdown on
-every build.
+`src/generated/`, `test/generated/`, and `public/styles.css` are gitignored —
+all three are wiped and rebuilt from source.
 
 CORS on `/api/*` is `origin: "*"`, which only affects other people's clients
 reading your API — the site itself is same-origin. Narrow it if you'd rather
@@ -287,6 +345,9 @@ nobody else consumed it.
 
 ```bash
 npm run dev          # local server
+npm run build        # content -> src/generated, Tailwind -> public/styles.css
+npm run fixtures:build  # test/fixtures -> test/generated (test entries only)
+npm run css:watch    # recompile the stylesheet on change, alongside dev
 npm test             # vitest against real workerd + D1
 npm run typecheck    # tsc over src and test
 npm run cf-typegen   # regenerate worker-configuration.d.ts after config changes

@@ -5,5 +5,9 @@ dist/
 .env
 *.log
 
-# Generated from content/posts by scripts/build-content.mjs
+# Compiled from Markdown by scripts/build-content.mjs
 src/generated/
+test/generated/
+
+# Compiled by Tailwind from src/styles.css — edit that, not this
+public/styles.css

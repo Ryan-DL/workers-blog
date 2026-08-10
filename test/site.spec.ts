@@ -58,12 +58,25 @@ describe("theme", () => {
     expect(body).toContain('catch(e){document.documentElement.dataset.theme="dark"}');
   });
 
+  // These assert on data-* hooks rather than classes: the classes are Tailwind
+  // utilities, and a test that fails when a button is restyled is testing the
+  // wrong thing. public/theme.js queries the same attributes.
   it("renders a toggle with both icons present", async () => {
     const { body } = await page("/");
 
-    expect(body).toContain('class="theme-toggle"');
-    expect(body).toContain("icon-sun");
-    expect(body).toContain("icon-moon");
+    expect(body).toContain("data-theme-toggle");
+    expect(body).toContain('data-icon="sun"');
+    expect(body).toContain('data-icon="moon"');
+  });
+
+  it("flips the icons from the [data-theme] attribute, not the OS", async () => {
+    const { body } = await page("/");
+
+    // The `light:` variant compiles against [data-theme="light"], so an
+    // explicit choice beats prefers-color-scheme — which the media query in
+    // src/styles.css alone could not do.
+    expect(body).toContain("light:opacity-100");
+    expect(body).toContain("light:opacity-0");
   });
 });
 
@@ -76,10 +89,15 @@ describe("layout", () => {
     expect(body).toContain("/feed.xml");
   });
 
+  it("links the compiled stylesheet", async () => {
+    const { body } = await page("/");
+    expect(body).toContain('<link rel="stylesheet" href="/styles.css" />');
+  });
+
   it("renders only the socials that are configured", async () => {
     const { body } = await page("/");
 
-    expect(body).toContain('class="socials"');
+    expect(body).toContain("data-socials");
     expect(body).toContain("github.com");
     // Blank entries in blog.config.ts produce no icon at all.
     expect(body).not.toContain("mailto:");
@@ -90,7 +108,8 @@ describe("layout", () => {
     const { body } = await page("/about");
 
     expect(body).toContain('rel="canonical"');
-    expect(body).toContain('class="skip-link"');
+    expect(body).toContain('href="#main"');
+    expect(body).toContain("Skip to content");
   });
 });
 
@@ -118,7 +137,8 @@ describe("post page", () => {
     expect(res.status).toBe(200);
     expect(body).toContain("Hello, world");
     expect(body).toContain("How a post becomes an endpoint");
-    expect(body).toContain('class="prose"');
+    // Rendered Markdown is wrapped for @tailwindcss/typography.
+    expect(body).toContain('class="prose ');
   });
 
   it("marks the post for a view ping", async () => {
@@ -126,18 +146,37 @@ describe("post page", () => {
     expect(body).toContain('data-view-slug="hello-world"');
   });
 
-  it("shows related entries and tag links", async () => {
+  it("shows recent entries and tag links", async () => {
     const { body } = await page("/posts/why-workers");
 
-    expect(body).toContain('class="related"');
+    expect(body).toContain("data-recent");
+    expect(body).toContain("Recent");
     expect(body).toContain('href="/tags/cloudflare"');
+  });
+
+  it("leaves the entry being read out of its own Recent list", async () => {
+    const { body } = await page("/posts/why-workers");
+    const recent = body.slice(body.indexOf("data-recent"));
+
+    expect(recent).not.toContain('href="/posts/why-workers"');
+    expect(recent).toContain('href="/posts/hello-world"');
+  });
+
+  it("keeps previews and drafts out of Recent", async () => {
+    // Candidates come from published entries only, so an unpublished post
+    // can't reach the public via the foot of someone else's page.
+    const { body } = await page("/posts/hello-world");
+    const recent = body.slice(body.indexOf("data-recent"));
+
+    expect(recent).not.toContain("preview-example");
+    expect(recent).not.toContain("draft-example");
   });
 
   it("gives a link entry a callout to the external site", async () => {
     const { res, body } = await page("/posts/guest-post-on-edge-caching");
 
     expect(res.status).toBe(200);
-    expect(body).toContain('class="callout-link"');
+    expect(body).toContain("data-callout");
     expect(body).toContain("https://example.com/blog/edge-caching-mistakes");
     // A link is read elsewhere, so it is never view-counted.
     expect(body).not.toContain("data-view-slug");
@@ -166,7 +205,7 @@ describe("preview page", () => {
 
     expect(res.status).toBe(200);
     expect(body).toContain("A post you can preview but not find");
-    expect(body).toContain("preview-banner");
+    expect(body).toContain("data-preview-banner");
     expect(body).toContain('<meta name="robots" content="noindex, nofollow" />');
     expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
     expect(res.headers.get("cache-control")).toBe("private, no-store");
