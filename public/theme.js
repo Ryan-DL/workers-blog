@@ -1,5 +1,5 @@
 /**
- * Theme toggle and view pings.
+ * Theme toggle.
  *
  * The initial theme is already resolved by a tiny inline script in <head>
  * (see src/views/layout.ts) — it has to run before first paint, so it can't
@@ -56,24 +56,4 @@
   };
   if (query.addEventListener) query.addEventListener("change", onSystemChange);
   else if (query.addListener) query.addListener(onSystemChange);
-
-  // --- View ping ----------------------------------------------------------
-  // Fires only on published posts; the server rejects anything else anyway.
-  var article = document.querySelector("[data-view-slug]");
-  if (!article) return;
-
-  fetch("/api/entries/" + encodeURIComponent(article.dataset.viewSlug) + "/views", {
-    method: "POST",
-  })
-    .then(function (res) {
-      return res.ok ? res.json() : null;
-    })
-    .then(function (data) {
-      if (!data) return;
-      var target = document.querySelector("[data-view-count]");
-      if (target) target.textContent = data.views === 1 ? "1 view" : data.views + " views";
-    })
-    .catch(function () {
-      /* A missing view count is not worth bothering the reader about. */
-    });
 })();

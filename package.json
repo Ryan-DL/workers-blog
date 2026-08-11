@@ -14,8 +14,6 @@
     "test": "npm run build && npm run fixtures:build && vitest run",
     "test:watch": "npm run build && npm run fixtures:build && vitest",
     "typecheck": "npm run content:build && npm run fixtures:build && tsc --noEmit -p tsconfig.json && tsc --noEmit -p test/tsconfig.json",
-    "db:apply:local": "wrangler d1 execute blog-db --local --file=./src/db/schema.sql",
-    "db:apply:remote": "wrangler d1 execute blog-db --remote --file=./src/db/schema.sql",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {

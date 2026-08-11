@@ -141,10 +141,6 @@ describe("post page", () => {
     expect(body).toContain('class="prose ');
   });
 
-  it("marks the post for a view ping", async () => {
-    const { body } = await page("/posts/hello-world");
-    expect(body).toContain('data-view-slug="hello-world"');
-  });
 
   it("shows recent entries and tag links", async () => {
     const { body } = await page("/posts/why-workers");
@@ -178,8 +174,6 @@ describe("post page", () => {
     expect(res.status).toBe(200);
     expect(body).toContain("data-callout");
     expect(body).toContain("https://example.com/blog/edge-caching-mistakes");
-    // A link is read elsewhere, so it is never view-counted.
-    expect(body).not.toContain("data-view-slug");
   });
 
   it("404s a draft with an HTML page", async () => {
@@ -211,10 +205,6 @@ describe("preview page", () => {
     expect(res.headers.get("cache-control")).toBe("private, no-store");
   });
 
-  it("is not view-counted", async () => {
-    const { body } = await page("/posts/preview-example");
-    expect(body).not.toContain("data-view-slug");
-  });
 });
 
 describe("tag page", () => {

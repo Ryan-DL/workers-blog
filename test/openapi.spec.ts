@@ -1,6 +1,5 @@
 import { SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { applySchema } from "./helpers";
 
 interface Spec {
   openapi: string;
@@ -13,8 +12,6 @@ interface Spec {
 let spec: Spec;
 
 beforeAll(async () => {
-  // The path-coverage test below actually calls the view-count endpoints.
-  await applySchema();
   spec = await (await SELF.fetch("https://example.com/openapi.json")).json<Spec>();
 });
 
@@ -63,13 +60,6 @@ describe("/openapi.json", () => {
     }
   });
 
-  it("declares the POST operation for view counting", () => {
-    const views = spec.paths["/api/entries/{slug}/views"];
-
-    expect(views).toBeDefined();
-    expect(views).toHaveProperty("get");
-    expect(views).toHaveProperty("post");
-  });
 
   it("models the two entry kinds as a discriminated union", () => {
     const summary = spec.components.schemas.EntrySummary as {

@@ -116,10 +116,8 @@ export function tagPage(tag: string, entries: EntrySummary[]): Html {
 
 export function entryPage(entry: Entry, recent: EntrySummary[]): Html {
   const isLink = entry.kind === "link";
-  // Only a published post gets a view ping; the server rejects anything else.
-  const countable = entry.status === "published" && !isLink;
 
-  return html`<article ${countable ? raw(`data-view-slug="${entry.slug}"`) : ""}>
+  return html`<article>
       ${entry.status === "preview"
         ? html`<div
             data-preview-banner
@@ -140,7 +138,6 @@ export function entryPage(entry: Entry, recent: EntrySummary[]): Html {
             ? html`<span class="${BADGE_LINK}">${entry.site}</span>`
             : html`<span class="${BADGE}">${entry.readingMinutes} min read</span>`}
           ${entry.author ? html`<span>${entry.author}</span>` : ""}
-          ${countable ? html`<span class="tabular-nums" data-view-count></span>` : ""}
         </div>
         <h1 class="mt-2 mb-3 text-[2rem] font-bold leading-[1.18] tracking-[-0.03em]">
           ${entry.title}

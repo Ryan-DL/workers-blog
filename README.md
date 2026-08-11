@@ -1,8 +1,9 @@
 # blog
 
-A blog on Cloudflare Workers. Content is Markdown files in this repo; D1 holds
-the mutable state (view counts). The site is server-rendered by the Worker, and
-the same Worker exposes a JSON API with an OpenAPI spec.
+A blog on Cloudflare Workers. Content is Markdown files in this repo, compiled
+into the Worker at build time — there is no database. The site is
+server-rendered by the Worker, and the same Worker exposes a read-only JSON API
+with an OpenAPI spec.
 
 ## Make it yours
 
@@ -92,15 +93,16 @@ the detail route is the place to add it.)
 
 `status` comes back on every entry, and the site uses it: a preview page renders
 a "Preview" banner, carries `<meta name="robots" content="noindex, nofollow">`,
-and is excluded from view counting so a post doesn't launch with numbers from
-you and your reviewers reloading it.
+and is left out of the sitemap.
 
 ## Where data lives
 
 | | Where | Changes |
 | --- | --- | --- |
 | Entry content | `content/**/*.md`, compiled into the Worker bundle | On deploy |
-| View counts | D1 (`post_views`) | Every request |
+
+The Worker holds no mutable state at all, which is why it needs no database and
+no bindings.
 
 `scripts/build-content.mjs` parses frontmatter and renders Markdown to HTML **at
 build time**, in Node, and writes `src/generated/entries.ts`. So `gray-matter`
@@ -130,7 +132,6 @@ nothing in `src/` knows the difference.
 ```bash
 npm install
 npm run build                  # content/ -> src/generated/, Tailwind -> public/styles.css
-npm run db:apply:local         # create post_views in the local D1
 npm run dev                    # http://localhost:8787
 ```
 
@@ -196,14 +197,11 @@ Everything returns `entries` — a mixed list unless you narrow it by kind.
 | --- | --- | --- |
 | GET | `/api` | Endpoint index |
 | GET | `/api/health` | `{ ok, entries, posts, links, byStatus, timestamp }` |
-| GET | `/api/entries` | The timeline. `?kind=&tag=&q=&limit=&offset=&views=` |
+| GET | `/api/entries` | The timeline. `?kind=&tag=&q=&limit=&offset=` |
 | GET | `/api/posts` | Alias for `?kind=post` |
 | GET | `/api/links` | Alias for `?kind=link` |
-| GET | `/api/entries/:slug` | Full entry incl. `markdown` and `html`; `?views=1` |
-| GET | `/api/entries/:slug/views` | Posts only |
-| POST | `/api/entries/:slug/views` | Posts only; atomic increment |
+| GET | `/api/entries/:slug` | Full entry incl. `markdown` and `html` |
 | GET | `/api/tags` | Tags with counts across both kinds, most-used first |
-| GET | `/api/popular` | Most-viewed posts; `?limit=` |
 | GET | `/feed.xml` | RSS 2.0 over the whole timeline |
 | GET | `/sitemap.xml` | Hosted posts only |
 | GET | `/openapi.json` | OpenAPI 3.1 document; rendered at `/docs` |
@@ -216,11 +214,6 @@ Behaviour worth knowing:
 - `limit` caps at 100.
 - Drafts 404 everywhere. Previews 404 from nothing but appear in no listing —
   see [Publication status](#publication-status).
-- View counting is for **published posts** only. On a link or a preview it
-  returns **400** (the entry exists, the operation doesn't apply); on an
-  unknown slug, 404. Preview reads are deliberately not counted, so a post
-  doesn't launch with inflated numbers. `?views=1` on the timeline attaches
-  `views` to posts and leaves links without the field.
 - In RSS, a link item's `<link>` points at the external URL, while its `<guid>`
   stays on your domain so readers keep a stable identity for the item.
 - The sitemap lists only hosted posts — `renderSitemap` takes `Post[]`, not
@@ -291,22 +284,19 @@ block in `src/styles.css` and the `matchMedia` call in the bootstrap.
 ### Hooks
 
 Anything JavaScript or a test needs to find uses a `data-` attribute —
-`data-theme-toggle`, `data-view-slug`, `data-socials`, `data-recent`. Utility
+`data-theme-toggle`, `data-socials`, `data-recent`. Utility
 classes describe how something looks and change whenever it's restyled, so
 they're the wrong thing to query or assert on.
 
 ## Going live
 
-Deploying needs a Cloudflare account and a real D1 database:
+Deploying needs a Cloudflare account and nothing else — there are no bindings
+to provision:
 
 ```bash
 wrangler login                       # interactive — run this yourself
-wrangler d1 create blog-db           # paste the returned id into wrangler.jsonc
-npm run db:apply:remote
 npm run deploy
 ```
-
-Local dev works against a placeholder `database_id`; `deploy` will not.
 
 Static files are served by Workers Static Assets from `public/` — the same
 Worker serves the site, the assets, and the API, so there's one deploy, one
@@ -352,14 +342,12 @@ scripts/build-content.mjs build-time Markdown -> a generated entries module
 src/index.ts              Hono app: pages, API, feeds
 src/config.ts             config types, social registry, resolution
 src/content.ts            queries over the compiled entries
-src/views.ts              D1 view counting
 src/feed.ts               RSS + sitemap
 src/openapi.ts            the OpenAPI document
 src/views/                HTML templates, styled with Tailwind utilities
 src/styles.css            Tailwind entry: design tokens, theme rule, prose
-src/db/schema.sql         D1 schema
 public/                   theme.js, avatar.svg, favicon.svg (+ compiled styles.css)
-test/                     integration tests against a real Worker + D1
+test/                     integration tests against a real Worker
 test/fixtures/            the entries those tests run against, not the site's
 ```
 
@@ -377,7 +365,7 @@ npm run dev          # local server
 npm run build        # content -> src/generated, Tailwind -> public/styles.css
 npm run fixtures:build  # test/fixtures -> test/generated (test entries only)
 npm run css:watch    # recompile the stylesheet on change, alongside dev
-npm test             # vitest against real workerd + D1
+npm test             # vitest against real workerd
 npm run typecheck    # tsc over src and test
 npm run cf-typegen   # regenerate worker-configuration.d.ts after config changes
 npm run deploy

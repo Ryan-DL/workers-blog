@@ -1,9 +1,5 @@
-import { SELF, env } from "cloudflare:test";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { applySchema, resetViews } from "./helpers";
-
-beforeAll(applySchema);
-beforeEach(resetViews);
+import { SELF } from "cloudflare:test";
+import { describe, expect, it } from "vitest";
 
 interface Summary {
   kind: "post" | "link";
@@ -14,7 +10,6 @@ interface Summary {
   tags: string[];
   url?: string;
   site?: string;
-  views?: number;
   readingMinutes?: number;
 }
 
@@ -277,84 +272,6 @@ describe("preview entries", () => {
     expect(sitemap).not.toContain("preview-example");
   });
 
-  it("refuses view counting until it's published", async () => {
-    const res = await SELF.fetch(`${PREVIEW}/views`, { method: "POST" });
-
-    expect(res.status).toBe(400);
-    expect((await res.json<{ error: string }>()).error).toContain("preview");
-
-    const { results } = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM post_views",
-    ).all<{ n: number }>();
-    expect(results[0]!.n).toBe(0);
-  });
-
-  it("omits views from its detail response even when asked", async () => {
-    const res = await SELF.fetch(`${PREVIEW}?views=1`);
-    expect(await res.json()).not.toHaveProperty("views");
-  });
-});
-
-describe("view counts", () => {
-  it("starts at zero and increments on POST", async () => {
-    const zero = await SELF.fetch("https://example.com/api/entries/hello-world/views");
-    expect(await zero.json()).toEqual({ slug: "hello-world", views: 0 });
-
-    for (const expected of [1, 2, 3]) {
-      const res = await SELF.fetch("https://example.com/api/entries/hello-world/views", {
-        method: "POST",
-      });
-      expect(await res.json<{ views: number }>()).toEqual({ slug: "hello-world", views: expected });
-    }
-  });
-
-  it("rejects view counting on an external link with 400, not 404", async () => {
-    const res = await SELF.fetch("https://example.com/api/entries/sqlite-at-the-edge/views", {
-      method: "POST",
-    });
-
-    expect(res.status).toBe(400);
-    expect((await res.json<{ error: string }>()).error).toContain("external link");
-
-    const { results } = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM post_views",
-    ).all<{ n: number }>();
-    expect(results[0]!.n).toBe(0);
-  });
-
-  it("404s view counting on slugs that aren't published", async () => {
-    const res = await SELF.fetch("https://example.com/api/entries/draft-example/views", {
-      method: "POST",
-    });
-    expect(res.status).toBe(404);
-  });
-
-  it("attaches counts to posts in the timeline, leaving links untouched", async () => {
-    await SELF.fetch("https://example.com/api/entries/hello-world/views", { method: "POST" });
-
-    const body = await list("/api/entries?views=1");
-    const posts = body.entries.filter((e) => e.kind === "post");
-    const links = body.entries.filter((e) => e.kind === "link");
-
-    expect(body.entries.find((e) => e.slug === "hello-world")?.views).toBe(1);
-    expect(posts.every((e) => typeof e.views === "number")).toBe(true);
-    expect(links.every((e) => e.views === undefined)).toBe(true);
-  });
-
-  it("ranks popular posts and drops unknown slugs", async () => {
-    await SELF.fetch("https://example.com/api/entries/why-workers/views", { method: "POST" });
-    await SELF.fetch("https://example.com/api/entries/hello-world/views", { method: "POST" });
-    await SELF.fetch("https://example.com/api/entries/hello-world/views", { method: "POST" });
-
-    // A stale row whose Markdown file no longer exists.
-    await env.DB.prepare("INSERT INTO post_views (slug, views) VALUES ('deleted-post', 999)").run();
-
-    const res = await SELF.fetch("https://example.com/api/popular");
-    const body = await res.json<{ entries: Summary[] }>();
-
-    expect(body.entries.map((e) => e.slug)).not.toContain("deleted-post");
-    expect(body.entries[0]).toMatchObject({ slug: "hello-world", views: 2 });
-  });
 });
 
 describe("tags", () => {

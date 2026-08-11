@@ -46,14 +46,13 @@ export function openApiSpec(site: Site): Record<string, unknown> {
         "`preview` entries are fetchable by slug but appear in no list, feed, tag",
         "count, or sitemap; `draft` entries are never served at all.",
         "",
-        "No authentication. The only write operation is incrementing a view count.",
+        "No authentication, and no write operations — the API is read-only.",
       ].join("\n"),
       license: { name: "MIT" },
     },
     servers: [{ url: site.url, description: "This deployment" }],
     tags: [
       { name: "Entries", description: "The timeline of posts and links" },
-      { name: "Views", description: "View counts, backed by D1" },
       { name: "Discovery", description: "Tags, feeds, and service metadata" },
     ],
     paths: {
@@ -94,7 +93,6 @@ export function openApiSpec(site: Site): Record<string, unknown> {
             { $ref: "#/components/parameters/Query" },
             { $ref: "#/components/parameters/Limit" },
             { $ref: "#/components/parameters/Offset" },
-            { $ref: "#/components/parameters/WithViews" },
           ],
           responses: {
             "200": { $ref: "#/components/responses/EntryList" },
@@ -112,7 +110,6 @@ export function openApiSpec(site: Site): Record<string, unknown> {
             { $ref: "#/components/parameters/Query" },
             { $ref: "#/components/parameters/Limit" },
             { $ref: "#/components/parameters/Offset" },
-            { $ref: "#/components/parameters/WithViews" },
           ],
           responses: { "200": { $ref: "#/components/responses/EntryList" } },
         },
@@ -139,7 +136,6 @@ export function openApiSpec(site: Site): Record<string, unknown> {
             "Returns the body as both `markdown` and rendered `html`. This is the only route that will return a `preview` entry; such responses carry `X-Robots-Tag: noindex, nofollow`.",
           parameters: [
             { $ref: "#/components/parameters/Slug" },
-            { $ref: "#/components/parameters/WithViews" },
           ],
           responses: {
             "200": {
@@ -147,71 +143,6 @@ export function openApiSpec(site: Site): Record<string, unknown> {
               content: { "application/json": { schema: { $ref: "#/components/schemas/Entry" } } },
             },
             "404": { $ref: "#/components/responses/NotFound" },
-          },
-        },
-      },
-      "/api/entries/{slug}/views": {
-        get: {
-          tags: ["Views"],
-          summary: "Read a view count",
-          parameters: [{ $ref: "#/components/parameters/Slug" }],
-          responses: {
-            "200": { $ref: "#/components/responses/Views" },
-            "400": { $ref: "#/components/responses/NotCountable" },
-            "404": { $ref: "#/components/responses/NotFound" },
-          },
-        },
-        post: {
-          tags: ["Views"],
-          summary: "Record a view",
-          description:
-            "Atomically increments and returns the new count. Published posts only — an external link or a preview returns 400, since the entry exists but the operation doesn't apply to it.",
-          parameters: [{ $ref: "#/components/parameters/Slug" }],
-          responses: {
-            "200": { $ref: "#/components/responses/Views" },
-            "400": { $ref: "#/components/responses/NotCountable" },
-            "404": { $ref: "#/components/responses/NotFound" },
-          },
-        },
-      },
-      "/api/popular": {
-        get: {
-          tags: ["Views"],
-          summary: "Most-viewed posts",
-          parameters: [
-            {
-              name: "limit",
-              in: "query",
-              schema: { type: "integer", minimum: 0, maximum: 100, default: 5 },
-            },
-          ],
-          responses: {
-            "200": {
-              description: "Ranked posts, each with its view count",
-              content: {
-                "application/json": {
-                  schema: {
-                    type: "object",
-                    required: ["entries"],
-                    properties: {
-                      entries: {
-                        type: "array",
-                        items: {
-                          allOf: [
-                            { $ref: "#/components/schemas/EntrySummary" },
-                            {
-                              type: "object",
-                              required: ["views"],
-                              properties: { views: { type: "integer" } },
-                            },
-                          ],
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
           },
         },
       },
@@ -318,29 +249,14 @@ export function openApiSpec(site: Site): Record<string, unknown> {
           description: "A malformed value falls back to 0.",
           schema: { type: "integer", minimum: 0, default: 0 },
         },
-        WithViews: {
-          name: "views",
-          in: "query",
-          description:
-            "Set to `1` or `true` to attach view counts. Only posts gain a `views` field; links are left without it.",
-          schema: { type: "string", enum: ["1", "true"] },
-        },
       },
       responses: {
         EntryList: {
           description: "A page of entries",
           content: { "application/json": { schema: { $ref: "#/components/schemas/EntryList" } } },
         },
-        Views: {
-          description: "The view count",
-          content: { "application/json": { schema: { $ref: "#/components/schemas/Views" } } },
-        },
         BadRequest: {
           description: "A parameter was understood but invalid",
-          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-        },
-        NotCountable: {
-          description: "The entry exists but has no view count (an external link, or a preview)",
           content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
         },
         NotFound: {
@@ -379,11 +295,6 @@ export function openApiSpec(site: Site): Record<string, unknown> {
           required: ["tag", "count"],
           properties: { tag: { type: "string" }, count: { type: "integer" } },
         },
-        Views: {
-          type: "object",
-          required: ["slug", "views"],
-          properties: { slug: { type: "string" }, views: { type: "integer", minimum: 0 } },
-        },
         PostSummary: {
           type: "object",
           title: "PostSummary",
@@ -392,10 +303,6 @@ export function openApiSpec(site: Site): Record<string, unknown> {
             kind: { type: "string", const: "post" },
             ...ENTRY_BASE_PROPS,
             readingMinutes: { type: "integer", minimum: 1 },
-            views: {
-              type: "integer",
-              description: "Only present when the request asked for view counts.",
-            },
           },
         },
         LinkSummary: {

@@ -28,16 +28,6 @@ export function getEntry(slug: string): Entry | undefined {
   return bySlug.get(slug);
 }
 
-/**
- * Narrowed lookup for endpoints that only make sense on a published post —
- * view counting. A preview post is deliberately excluded so reads of an
- * unpublished draft don't inflate its numbers before launch.
- */
-export function getPublishedPost(slug: string): Post | undefined {
-  const entry = bySlug.get(slug);
-  return entry?.kind === "post" && entry.status === "published" ? entry : undefined;
-}
-
 export function summarize(entry: Entry): EntrySummary {
   const { markdown: _markdown, html: _html, sourceFile: _sourceFile, ...summary } = entry;
   return summary;

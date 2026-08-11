@@ -22,9 +22,6 @@ export default defineConfig({
       // Bindings and vars come from the real wrangler config, so tests run
       // against the same shape as `wrangler dev`.
       wrangler: { configPath: "./wrangler.jsonc" },
-      miniflare: {
-        d1Databases: ["DB"],
-      },
     }),
   ],
   resolve: {
