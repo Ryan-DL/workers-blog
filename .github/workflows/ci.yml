@@ -1,0 +1,62 @@
+name: CI
+
+# Pushes to main deploy. Pull requests only verify — nothing reaches
+# ryandelap.io until it is on main and the checks below have passed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# One run per branch. Pull request runs are cancelled when a newer commit
+# arrives, but pushes to main are not: cancelling a half-finished deploy is a
+# worse outcome than waiting for it, so those queue instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Both scripts compile content and fixtures first, so nothing generated
+      # is stale by the time it is checked.
+      - run: npm run typecheck
+      - run: npm test
+
+  deploy:
+    name: Deploy to Cloudflare
+    # The gate: a red suite means no deploy.
+    needs: verify
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run deploy` is the same command used locally — it rebuilds
+      # content and CSS, then uploads. Using the repo's own wrangler rather
+      # than a marketplace action keeps CI and a local deploy on one code path.
+      - run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

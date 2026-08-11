@@ -302,6 +302,33 @@ Static files are served by Workers Static Assets from `public/` — the same
 Worker serves the site, the assets, and the API, so there's one deploy, one
 domain, and no CORS between the front end and the API.
 
+### Deploying from CI
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`:
+typecheck, then the test suite, and — on `main` only — `npm run deploy`. A red
+suite blocks the deploy, so **pushing to `main` is publishing**, and a broken
+build stops before it reaches the edge.
+
+CI runs the same `npm run deploy` you would run locally rather than a
+marketplace action, so there is one deploy path to reason about instead of two.
+
+It needs two repository secrets:
+
+| Secret | What |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | An API token with **Edit Cloudflare Workers** permission |
+| `CLOUDFLARE_ACCOUNT_ID` | The account the Worker lives in |
+
+Create the token at **Cloudflare dashboard → My Profile → API Tokens → Create
+Token → Edit Cloudflare Workers**, then:
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN     # paste when prompted; never commit it
+```
+
+Deploying by hand still works and needs neither secret — `wrangler login` uses
+your own OAuth session.
+
 ### The domain
 
 The domain is **ryandelap.io**, claimed by the `routes` entry in
