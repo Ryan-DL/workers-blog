@@ -53,10 +53,66 @@ jobs:
 
       - run: npm ci
 
-      # `npm run deploy` is the same command used locally — it rebuilds
-      # content and CSS, then uploads. Using the repo's own wrangler rather
-      # than a marketplace action keeps CI and a local deploy on one code path.
+      # `npm run deploy` is the same command used locally, run through the
+      # repo's own pinned wrangler — production and a local deploy stay on one
+      # code path.
       - run: npm run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  preview:
+    name: Preview
+    # Same gate as production: nothing is uploaded off a red suite.
+    needs: verify
+    # Pull requests from forks get no secrets, so the upload could only fail —
+    # skip rather than report a confusing failure. (Moot on a private repo.)
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # `versions upload` only uploads the Worker, so content and CSS have to
+      # be compiled first — `npm run deploy` normally does this for us.
+      - run: npm run build
+
+      # Uploads a version WITHOUT deploying it: production keeps serving
+      # whatever is on main. `--preview-alias` makes the hostname stable for
+      # the life of the PR, so the link in the comment below keeps working as
+      # commits land instead of changing on every push.
+      #
+      # Cloudflare's action here rather than the repo's wrangler, purely for
+      # its `deployment-url` output — the alternative is scraping the URL out
+      # of wrangler's stdout, which breaks whenever that output is reworded.
+      - id: upload
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: versions upload --preview-alias pr-${{ github.event.number }}
+
+      # One comment per PR, edited in place. `--edit-last` fails when there is
+      # nothing to edit, so the first run falls through to posting.
+      - name: Comment the preview URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+          URL: ${{ steps.upload.outputs.deployment-url }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          body=$(printf '**Preview:** %s\n\nBuilt from `%s`. This is an uploaded version, not a deployment — %s still serves `main`.' \
+            "$URL" "${SHA:0:7}" "ryandelap.io")
+          gh pr comment "$PR" --edit-last --body "$body" \
+            || gh pr comment "$PR" --body "$body"

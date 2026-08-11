@@ -329,6 +329,39 @@ gh secret set CLOUDFLARE_API_TOKEN     # paste when prompted; never commit it
 Deploying by hand still works and needs neither secret — `wrangler login` uses
 your own OAuth session.
 
+### Pull request previews
+
+Every pull request gets its own running copy of the site. CI runs `wrangler
+versions upload --preview-alias pr-<number>`, which **uploads a version without
+deploying it** — production keeps serving `main` — and comments the URL on the
+PR:
+
+```
+https://pr-42-blog.<subdomain>.workers.dev
+```
+
+The alias makes that hostname stable for the life of the PR, so the link keeps
+working as commits land rather than changing on every push. The comment is
+edited in place instead of a new one per commit.
+
+This needs `"preview_urls": true` in `wrangler.jsonc`. It has to be explicit:
+the setting defaults to the value of `workers_dev`, which the `routes` entry
+turned off, so previews would otherwise be silently disabled. Enabling it does
+**not** put the site back on `*.workers.dev`.
+
+Three things to know:
+
+- **Previews only live on `*.workers.dev`.** Cloudflare will not serve them
+  from a custom domain, so there is no `preview.ryandelap.io`.
+- **They're public, and they self-canonicalise.** Because `url` is empty, a
+  preview's canonical tag points at its own workers.dev host. Nothing links to
+  it, but it is not private.
+- **No logs.** Workers Logs, `wrangler tail`, and Logpush don't cover preview
+  URLs.
+
+Previews are simple here only because the Worker has no bindings. A Worker with
+a database needs a separate preview one, or every PR writes to production.
+
 ### The domain
 
 The domain is **ryandelap.io**, claimed by the `routes` entry in

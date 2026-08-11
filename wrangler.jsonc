@@ -26,7 +26,17 @@
   // The zone must already be on the same Cloudflare account; `wrangler deploy`
   // fails rather than creating one. Only the apex is claimed here — see the
   // README on adding www.
-  "routes": [{ "pattern": "ryandelap.io", "custom_domain": true }]
+  "routes": [{ "pattern": "ryandelap.io", "custom_domain": true }],
+
+  // Per-pull-request preview URLs, uploaded by CI with `wrangler versions
+  // upload`. This has to be set explicitly: it defaults to the value of
+  // `workers_dev`, which the `routes` entry above turned off, so previews would
+  // otherwise be silently disabled.
+  //
+  // Setting it does NOT put the site back on *.workers.dev — that is the
+  // `workers_dev` key, still off. It only allows versioned/aliased preview
+  // hostnames, which Cloudflare will not serve from a custom domain.
+  "preview_urls": true
 
   // Site title, description, socials, and the rest live in blog.config.ts —
   // one file, typed, rather than split between here and the source. Absolute
