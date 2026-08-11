@@ -1,4 +1,4 @@
--- D1 schema for blog-part2.
+-- D1 schema for blog.
 --
 -- Post content is NOT stored here: it lives in content/posts/*.md and is
 -- compiled into the Worker bundle. D1 holds only mutable, per-request state.

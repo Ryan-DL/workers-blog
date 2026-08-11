@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "blog-part2",
+  "name": "blog",
   "main": "src/index.ts",
   "compatibility_date": "2025-08-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -11,14 +11,14 @@
   // D1 holds only the dynamic data (view counts). Post content lives in
   // content/posts/*.md and is compiled into the Worker at build time.
   //
-  // Created with `wrangler d1 create blog-part2-db` (region ENAM). The binding
-  // stays `DB` — that's what the Worker reads as `c.env.DB`, not the name
+  // Created with `wrangler d1 create blog-db` (region ENAM). The binding stays
+  // `DB` — that's what the Worker reads as `c.env.DB`, not the `blog_db` that
   // wrangler suggests when it creates the database.
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "blog-part2-db",
-      "database_id": "b9663601-08d0-49fa-8376-55f16ef1a5e6"
+      "database_name": "blog-db",
+      "database_id": "4d4e2f39-b952-463a-b5aa-5b005cdb0914"
     }
   ],
 
@@ -26,7 +26,17 @@
   // everything else falls through to the Worker, which renders the HTML.
   "assets": {
     "directory": "./public"
-  }
+  },
+
+  // The live domain. `custom_domain` makes Cloudflare own the whole hostname:
+  // it creates the DNS record and the certificate, and every path goes to this
+  // Worker. That's what we want — the site, the assets, and the API are one
+  // Worker, so there is nothing else at this hostname to route around.
+  //
+  // The zone must already be on the same Cloudflare account; `wrangler deploy`
+  // fails rather than creating one. Only the apex is claimed here — see the
+  // README on adding www.
+  "routes": [{ "pattern": "ryandelap.io", "custom_domain": true }]
 
   // Site title, description, socials, and the rest live in blog.config.ts —
   // one file, typed, rather than split between here and the source. Absolute

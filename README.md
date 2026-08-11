@@ -1,4 +1,4 @@
-# blog-part2
+# blog
 
 A blog on Cloudflare Workers. Content is Markdown files in this repo; D1 holds
 the mutable state (view counts). The site is server-rendered by the Worker, and
@@ -12,7 +12,7 @@ only file you need to edit.
 
 ```ts
 export default {
-  title: "blog-part2",
+  title: "blog",
   description: "A blog on Cloudflare Workers",
   url: "",              // empty = derive from the request. See below.
   author: { name, tagline, bio: ["…"], avatar, avatarAlt },
@@ -301,17 +301,46 @@ Deploying needs a Cloudflare account and a real D1 database:
 
 ```bash
 wrangler login                       # interactive — run this yourself
-wrangler d1 create blog-part2-db     # paste the returned id into wrangler.jsonc
+wrangler d1 create blog-db           # paste the returned id into wrangler.jsonc
 npm run db:apply:remote
 npm run deploy
 ```
 
-`wrangler.jsonc` ships with `database_id` set to a placeholder. Local dev works
-without it; `deploy` will not.
+Local dev works against a placeholder `database_id`; `deploy` will not.
 
 Static files are served by Workers Static Assets from `public/` — the same
 Worker serves the site, the assets, and the API, so there's one deploy, one
 domain, and no CORS between the front end and the API.
+
+### The domain
+
+The domain is **ryandelap.io**, claimed by the `routes` entry in
+`wrangler.jsonc`:
+
+```jsonc
+"routes": [{ "pattern": "ryandelap.io", "custom_domain": true }]
+```
+
+`custom_domain: true` hands Cloudflare the whole hostname — it creates the DNS
+record and issues the certificate on deploy, and every path routes to this
+Worker. The zone has to already be on the same Cloudflare account; `wrangler
+deploy` fails rather than registering one for you. Expect a few minutes between
+the first deploy and the certificate going live.
+
+Two consequences worth knowing:
+
+- **`workers.dev` is now off.** Once a Wrangler file has `routes` and no
+  explicit `workers_dev`, the `*.workers.dev` hostname is disabled. That's the
+  right default here — a second origin serving the same pages would compete with
+  the real domain for canonical URLs. Set `"workers_dev": true` to get it back.
+- **Only the apex is claimed.** `www.ryandelap.io` resolves to nothing. To
+  redirect it, add a Cloudflare Redirect Rule in the dashboard; adding it as a
+  second custom domain would serve the site at both hostnames instead, which is
+  usually not what you want.
+
+Because `url` in `blog.config.ts` is empty, canonical tags, the RSS feed, the
+sitemap, and the OpenAPI server all follow the hostname of the request — so
+none of them needed changing when the domain was added.
 
 ## Layout
 
