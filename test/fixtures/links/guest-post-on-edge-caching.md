@@ -4,7 +4,7 @@ date: 2026-02-20
 url: https://example.com/blog/edge-caching-mistakes
 site: Example Engineering
 tags: [cloudflare, architecture]
-author: Ryan
+author: Test Author
 ---
 
 Wrote this one for someone else's blog. The short version: I'd been treating

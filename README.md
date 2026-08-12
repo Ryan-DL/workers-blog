@@ -5,11 +5,26 @@ into the Worker at build time — there is no database. The site is
 server-rendered by the Worker, and the same Worker exposes a read-only JSON API
 with an OpenAPI spec.
 
+Clone it, edit one config file, and deploy — nothing here is wired to a
+particular person or domain.
+
 ## Make it yours
 
 Everything that isn't a post lives in **`blog.config.ts`** at the repo root —
 title, description, author, about-page copy, socials, and navigation. It's the
 only file you need to edit.
+
+Beyond that config, a fresh clone only wants:
+
+| | |
+| --- | --- |
+| `content/posts/*.md` | Delete the sample post and write your own |
+| `public/avatar.svg` | Replace with a real photo, and point `author.avatar` at it |
+| `name` in `wrangler.jsonc` | The Worker's name, and so its `*.workers.dev` hostname |
+| `routes` in `wrangler.jsonc` | Only if you have a domain — [see below](#using-your-own-domain) |
+
+The test suite reads `blog.config.ts` rather than hardcoding what it says, so
+filling it in with your own details doesn't turn the suite red.
 
 ```ts
 export default {
@@ -18,7 +33,7 @@ export default {
   url: "",              // empty = derive from the request. See below.
   author: { name, tagline, bio: ["…"], avatar, avatarAlt },
   socials: {
-    github: "Ryan-Dl",  // a bare handle…
+    github: "octocat",  // a bare handle…
     x: "",              // …or "" to leave it out entirely
     email: "",
   },
@@ -151,7 +166,7 @@ title: Hello, world      # required
 date: 2026-01-15         # required
 status: preview          # optional — published (default) | preview | draft
 tags: [meta, cloudflare] # optional
-author: Ryan             # optional
+author: Your Name        # optional
 excerpt: ...             # optional — derived from the body if omitted
 slug: custom-slug        # optional — overrides the filename
 updated: 2026-01-20      # optional
@@ -298,6 +313,11 @@ wrangler login                       # interactive — run this yourself
 npm run deploy
 ```
 
+That publishes to `blog.<your-subdomain>.workers.dev`, which is enough to have a
+real site on the internet without owning a domain. Rename the Worker by changing
+`name` in `wrangler.jsonc`; point it at a domain you own with
+[the `routes` entry](#using-your-own-domain).
+
 Static files are served by Workers Static Assets from `public/` — the same
 Worker serves the site, the assets, and the API, so there's one deploy, one
 domain, and no CORS between the front end and the API.
@@ -344,15 +364,16 @@ The alias makes that hostname stable for the life of the PR, so the link keeps
 working as commits land rather than changing on every push. The comment is
 edited in place instead of a new one per commit.
 
-This needs `"preview_urls": true` in `wrangler.jsonc`. It has to be explicit:
-the setting defaults to the value of `workers_dev`, which the `routes` entry
-turned off, so previews would otherwise be silently disabled. Enabling it does
-**not** put the site back on `*.workers.dev`.
+This needs `"preview_urls": true` in `wrangler.jsonc`. The setting defaults to
+the value of `workers_dev`, so it is redundant while the site is on
+workers.dev — it is written out because adding a custom domain turns
+`workers_dev` off, which would silently take previews with it.
 
 Three things to know:
 
 - **Previews only live on `*.workers.dev`.** Cloudflare will not serve them
-  from a custom domain, so there is no `preview.ryandelap.io`.
+  from a custom domain, so there is no `preview.your-domain.com` even once the
+  site has moved.
 - **They're public, and they self-canonicalise.** Because `url` is empty, a
   preview's canonical tag points at its own workers.dev host. Nothing links to
   it, but it is not private.
@@ -362,13 +383,14 @@ Three things to know:
 Previews are simple here only because the Worker has no bindings. A Worker with
 a database needs a separate preview one, or every PR writes to production.
 
-### The domain
+### Using your own domain
 
-The domain is **ryandelap.io**, claimed by the `routes` entry in
-`wrangler.jsonc`:
+Out of the box the site is served from `*.workers.dev`, so a fresh clone deploys
+and is live without owning anything. To move it to a domain you own, add a
+`routes` entry to `wrangler.jsonc` and drop `workers_dev`:
 
 ```jsonc
-"routes": [{ "pattern": "ryandelap.io", "custom_domain": true }]
+"routes": [{ "pattern": "example.com", "custom_domain": true }]
 ```
 
 `custom_domain: true` hands Cloudflare the whole hostname — it creates the DNS
@@ -379,18 +401,19 @@ the first deploy and the certificate going live.
 
 Two consequences worth knowing:
 
-- **`workers.dev` is now off.** Once a Wrangler file has `routes` and no
+- **`workers.dev` goes off with it.** Once a Wrangler file has `routes` and no
   explicit `workers_dev`, the `*.workers.dev` hostname is disabled. That's the
-  right default here — a second origin serving the same pages would compete with
-  the real domain for canonical URLs. Set `"workers_dev": true` to get it back.
-- **Only the apex is claimed.** `www.ryandelap.io` resolves to nothing. To
+  right default — a second origin serving the same pages would compete with the
+  real domain for canonical URLs. Keep `"workers_dev": true` to have both, and
+  keep `"preview_urls": true` either way (see above).
+- **Only the apex is claimed.** `www.example.com` would resolve to nothing. To
   redirect it, add a Cloudflare Redirect Rule in the dashboard; adding it as a
   second custom domain would serve the site at both hostnames instead, which is
   usually not what you want.
 
 Because `url` in `blog.config.ts` is empty, canonical tags, the RSS feed, the
 sitemap, and the OpenAPI server all follow the hostname of the request — so
-none of them needed changing when the domain was added.
+none of them need changing when the domain is added.
 
 ## Layout
 
@@ -430,3 +453,7 @@ npm run typecheck    # tsc over src and test
 npm run cf-typegen   # regenerate worker-configuration.d.ts after config changes
 npm run deploy
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE). Use it, fork it, publish under it.

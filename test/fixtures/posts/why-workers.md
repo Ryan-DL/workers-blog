@@ -2,7 +2,7 @@
 title: Why run a blog on Workers
 date: 2026-02-03
 tags: [cloudflare, architecture]
-author: Ryan
+author: Test Author
 excerpt: Notes on picking Workers over a conventional server, and where the split between build time and request time falls.
 ---
 

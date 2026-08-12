@@ -3,7 +3,7 @@ title: A post you can preview but not find
 date: 2026-04-02
 status: preview
 tags: [meta]
-author: Ryan
+author: Test Author
 ---
 
 This post has `status: preview`, so it's reachable at

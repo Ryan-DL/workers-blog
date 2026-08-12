@@ -11,7 +11,7 @@ import type { BlogConfig } from "./src/config";
  * `npm run typecheck` will tell you if you mistype a key.
  */
 export default {
-  title: "Point of Presence — Ryan De Lap",
+  title: "blog",
   description: "A blog on Cloudflare Workers",
 
   // Leave empty to derive every absolute URL from the incoming request — right
@@ -22,8 +22,8 @@ export default {
   language: "en",
 
   author: {
-    name: "Ryan De Lap",
-    tagline: "Engineer. I write about the edge, databases, and things that surprised me.",
+    name: "Your Name",
+    tagline: "One line about you — this sits under your name on the about page.",
     bio: [
       "This is placeholder copy. Replace it with your own — each string in this array becomes a paragraph on the about page.",
       "The site runs on Cloudflare Workers. Posts are Markdown files compiled into the Worker at build time, so serving one is a lookup rather than a database query. Links to writing published elsewhere share the same timeline.",
@@ -38,7 +38,7 @@ export default {
    * Delete a line, or leave it "", and that icon won't appear in the footer.
    */
   socials: {
-    github: "Ryan-Dl",
+    github: "octocat",
     x: "",
     bluesky: "",
     mastodon: "",

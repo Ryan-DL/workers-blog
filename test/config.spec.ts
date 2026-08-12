@@ -1,5 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import blogConfig from "../blog.config";
 import { resolveSite, resolveSocials, type BlogConfig } from "../src/config";
 
 /** A config with everything filled in, to vary one field at a time. */
@@ -144,21 +145,26 @@ describe("config reaches the rendered site", () => {
     expect(spec.servers[0]!.url).toBe("https://blog.test");
   });
 
-  it("renders only the socials that are filled in", async () => {
+  it("renders every social that is filled in, and nothing that isn't", async () => {
     const body = await (await SELF.fetch("https://example.com/")).text();
-    const footer = body.slice(body.indexOf("data-socials"));
+    const start = body.indexOf("data-socials");
+    const footer = body.slice(start, body.indexOf("</div>", start));
 
-    // blog.config.ts ships with github set and the rest blank.
-    expect(footer).toContain("github.com");
-    expect(footer).not.toContain("linkedin.com");
-    expect(footer).not.toContain("x.com");
-    expect(footer).not.toContain("mailto:");
+    // Against whatever blog.config.ts currently says, not a hardcoded list —
+    // editing the config to make the blog yours must not fail the suite.
+    const expected = resolveSocials(blogConfig);
+    for (const link of expected) expect(footer).toContain(`href="${link.href}"`);
+    expect(footer.match(/<a\b/g) ?? []).toHaveLength(expected.length);
   });
 
   it("puts the configured author on the about page", async () => {
     const body = await (await SELF.fetch("https://example.com/about")).text();
+    const { author } = blogConfig;
 
-    expect(body).toContain("Ryan");
-    expect(body).toContain("placeholder photo");
+    expect(body).toContain(author.name);
+    expect(body).toContain(author.tagline);
+    // The badge is tied to the shipped placeholder; a real photo drops it.
+    if (author.avatar === "/avatar.svg") expect(body).toContain("placeholder photo");
+    else expect(body).not.toContain("placeholder photo");
   });
 });

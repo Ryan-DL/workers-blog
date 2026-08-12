@@ -2,7 +2,7 @@
 title: Hello, world
 date: 2026-01-15
 tags: [meta, cloudflare]
-author: Ryan
+author: Test Author
 ---
 
 This is the first post. It exists mostly to prove the content pipeline works

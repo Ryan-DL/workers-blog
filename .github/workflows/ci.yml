@@ -1,7 +1,7 @@
 name: CI
 
-# Pushes to main deploy. Pull requests only verify — nothing reaches
-# ryandelap.io until it is on main and the checks below have passed.
+# Pushes to main deploy. Pull requests only verify — nothing reaches the live
+# site until it is on main and the checks below have passed.
 on:
   push:
     branches: [main]
@@ -112,7 +112,7 @@ jobs:
           URL: ${{ steps.upload.outputs.deployment-url }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          body=$(printf '**Preview:** %s\n\nBuilt from `%s`. This is an uploaded version, not a deployment — %s still serves `main`.' \
-            "$URL" "${SHA:0:7}" "ryandelap.io")
+          body=$(printf '**Preview:** %s\n\nBuilt from `%s`. This is an uploaded version, not a deployment — production still serves `main`.' \
+            "$URL" "${SHA:0:7}")
           gh pr comment "$PR" --edit-last --body "$body" \
             || gh pr comment "$PR" --body "$body"

@@ -1,5 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import blogConfig from "../blog.config";
+import { resolveSocials } from "../src/config";
 
 const page = async (path: string) => {
   const res = await SELF.fetch(`https://example.com${path}`);
@@ -96,12 +98,16 @@ describe("layout", () => {
 
   it("renders only the socials that are configured", async () => {
     const { body } = await page("/");
+    const start = body.indexOf("data-socials");
+    const footer = body.slice(start, body.indexOf("</div>", start));
 
-    expect(body).toContain("data-socials");
-    expect(body).toContain("github.com");
-    // Blank entries in blog.config.ts produce no icon at all.
-    expect(body).not.toContain("mailto:");
-    expect(body).not.toContain("linkedin.com");
+    expect(start).toBeGreaterThan(-1);
+    // Read out of blog.config.ts rather than hardcoded, so filling the config
+    // in with your own handles doesn't fail the suite.
+    const expected = resolveSocials(blogConfig);
+    for (const link of expected) expect(footer).toContain(`href="${link.href}"`);
+    // One icon per configured link and no others — blank entries produce none.
+    expect(footer.match(/<a\b/g) ?? []).toHaveLength(expected.length);
   });
 
   it("sets a canonical URL and skip link", async () => {

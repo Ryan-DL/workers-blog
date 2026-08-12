@@ -18,28 +18,33 @@
     "directory": "./public"
   },
 
-  // The live domain. `custom_domain` makes Cloudflare own the whole hostname:
-  // it creates the DNS record and the certificate, and every path goes to this
-  // Worker. That's what we want — the site, the assets, and the API are one
-  // Worker, so there is nothing else at this hostname to route around.
+  // Out of the box the site is served from <name>.<subdomain>.workers.dev, so a
+  // fresh clone deploys and is live without owning a domain.
   //
-  // The zone must already be on the same Cloudflare account; `wrangler deploy`
-  // fails rather than creating one. Only the apex is claimed here — see the
-  // README on adding www.
-  "routes": [{ "pattern": "ryandelap.io", "custom_domain": true }],
+  // To put it on your own domain, add a `routes` entry with the zone already on
+  // the same Cloudflare account — `wrangler deploy` fails rather than
+  // registering one for you:
+  //
+  //   "routes": [{ "pattern": "example.com", "custom_domain": true }],
+  //
+  // `custom_domain: true` hands Cloudflare the whole hostname: it creates the
+  // DNS record and issues the certificate, and every path goes to this Worker.
+  // Adding `routes` also turns `workers_dev` off unless it is set explicitly,
+  // which is the right default — a second origin serving the same pages would
+  // compete with the real domain for canonical URLs. See the README.
+  "workers_dev": true,
 
   // Per-pull-request preview URLs, uploaded by CI with `wrangler versions
-  // upload`. This has to be set explicitly: it defaults to the value of
-  // `workers_dev`, which the `routes` entry above turned off, so previews would
-  // otherwise be silently disabled.
+  // upload`. It defaults to the value of `workers_dev`, so it is redundant
+  // today — but it is set explicitly because adding a custom domain would flip
+  // `workers_dev` off and silently disable previews with it.
   //
-  // Setting it does NOT put the site back on *.workers.dev — that is the
-  // `workers_dev` key, still off. It only allows versioned/aliased preview
-  // hostnames, which Cloudflare will not serve from a custom domain.
+  // Previews live on *.workers.dev only; Cloudflare will not serve them from a
+  // custom domain.
   "preview_urls": true
 
   // Site title, description, socials, and the rest live in blog.config.ts —
   // one file, typed, rather than split between here and the source. Absolute
   // URLs are derived from the incoming request, so there is no hostname to
-  // remember to change before deploying.
+  // remember to change before deploying, on workers.dev or your own domain.
 }
