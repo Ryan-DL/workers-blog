@@ -47,16 +47,16 @@ describe("theme", () => {
 
     // Must be inline in <head> and before the stylesheet's effects matter.
     expect(body).toContain('localStorage.getItem("theme")');
-    expect(body).toContain("prefers-color-scheme: light");
+    expect(body).toContain('document.documentElement.dataset.theme=t');
     expect(body.indexOf("localStorage.getItem")).toBeLessThan(body.indexOf("</head>"));
   });
 
-  it("falls back to dark, not light", async () => {
+  it("defaults to dark, only flipping if the visitor chose light", async () => {
     const { body } = await page("/");
 
-    // The bootstrap picks light only when the browser explicitly asks for it;
-    // every other path, including a thrown error, lands on dark.
-    expect(body).toContain('matches?"light":"dark"');
+    // The design is dark. We only leave it when the visitor explicitly picks
+    // light with the toggle — preferences and errors all land on dark.
+    expect(body).toContain('if(t!=="light"&&t!=="dark"){t="dark"}');
     expect(body).toContain('catch(e){document.documentElement.dataset.theme="dark"}');
   });
 

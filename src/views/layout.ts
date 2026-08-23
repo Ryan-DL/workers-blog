@@ -24,7 +24,7 @@ export interface PageMeta {
  * The attribute it sets is what the `dark:` and `light:` Tailwind variants key
  * off — see the @custom-variant declarations in src/styles.css.
  */
-export const THEME_BOOTSTRAP = `(function(){try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})();`;
+export const THEME_BOOTSTRAP = `(function(){try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark"){t="dark"}document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}})();`;
 
 /**
  * Both icons are always in the DOM; the palette in effect decides which one is
@@ -69,6 +69,14 @@ export function layout(meta: PageMeta, body: Html, site: Site): Html {
     <link rel="canonical" href="${canonical}" />
     ${meta.noindex ? raw('<meta name="robots" content="noindex, nofollow" />') : ""}
 
+    <!-- Fraunces for display, IBM Plex Mono for body — see src/styles.css. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap"
+      rel="stylesheet"
+    />
+
     <meta property="og:type" content="website" />
     <meta property="og:title" content="${fullTitle}" />
     <meta property="og:description" content="${meta.description}" />
@@ -85,7 +93,7 @@ export function layout(meta: PageMeta, body: Html, site: Site): Html {
     </script>
   </head>
   <body
-    class="bg-canvas text-body text-ink antialiased transition-colors duration-200 motion-reduce:transition-none"
+    class="bg-canvas font-mono text-body text-ink antialiased transition-colors duration-200 motion-reduce:transition-none"
   >
     <a
       href="#main"
@@ -97,7 +105,7 @@ export function layout(meta: PageMeta, body: Html, site: Site): Html {
            on a phone gets its own line instead of breaking mid-word. -->
       <header class="flex flex-wrap items-center gap-x-5 gap-y-3 pt-7 pb-10">
         <a
-          class="mr-auto font-mono text-[0.95rem] font-semibold tracking-tight text-ink no-underline"
+          class="mr-auto font-serif text-[1.05rem] font-bold tracking-tight text-ink no-underline"
           href="/"
           ><span class="mr-1.5 text-accent" aria-hidden="true">▍</span>${site.title}</a
         >

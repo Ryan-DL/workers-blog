@@ -64,7 +64,7 @@ function entryRow(entry: EntrySummary): Html {
         ? html`<span class="${BADGE_LINK}">${entry.site}</span>`
         : html`<span class="${BADGE}">${entry.readingMinutes} min</span>`}
     </div>
-    <h2 class="mb-1.5 text-[1.15rem] leading-snug font-semibold tracking-[-0.015em]">
+    <h2 class="mb-1.5 font-serif text-[1.4rem] leading-snug font-bold tracking-[-0.015em]">
       <a
         href="${hrefFor(entry)}"
         class="group text-ink no-underline hover:text-accent"
@@ -92,18 +92,77 @@ function timeline(entries: EntrySummary[], emptyMessage: Html): Html {
       </ul>`;
 }
 
-export function homePage(entries: EntrySummary[], site: Site): Html {
-  return html`<section class="mb-4 border-b border-line pb-10">
-      <h1 class="mb-2.5 text-[1.9rem] font-bold leading-[1.2] tracking-[-0.025em]">${site.title}</h1>
-      <p class="max-w-measure text-ink-dim">${site.description}</p>
-    </section>
+/**
+ * The homepage lead: who the blog belongs to, up front.
+ *
+ * The avatar, name, tagline, and a couple of paragraphs of bio sit at the top
+ * of the landing page rather than being exiled to a named About route. The
+ * visitor meets the author before the first post.
+ */
+function homeHero(site: Site): Html {
+  const { author } = site;
+  const isPlaceholder = author.avatar === "/avatar.svg";
 
-    ${timeline(entries, html`Nothing published yet.`)}`;
+  return html`<section class="mb-12 border-b border-line pb-10">
+      <div class="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-7">
+        <img
+          class="size-24 shrink-0 rounded-2xl border border-line-strong bg-surface object-cover"
+          src="${author.avatar}"
+          alt="${author.avatarAlt}"
+          width="96"
+          height="96"
+        />
+        <div class="min-w-0 flex-1">
+          <p class="font-mono text-xs font-semibold tracking-[0.14em] text-accent uppercase">
+            · Hey — I’m a human, not a brand
+          </p>
+          <h1 class="mt-2 mb-2 font-serif text-[2.4rem] leading-[1.05] font-bold tracking-[-0.02em]">
+            ${author.name}
+          </h1>
+          <p class="mb-4 font-serif text-[1.1rem] text-ink-dim italic">${author.tagline}</p>
+          ${author.bio.slice(0, 2).map(
+            (paragraph) => html`<p class="mb-3 max-w-[62ch] text-[0.95rem] text-ink">${paragraph}</p>`,
+          )}
+          ${site.socials.length > 0
+            ? html`<div class="mt-5 flex flex-wrap gap-2">
+                ${site.socials.map(
+                  (social) =>
+                    html`<a
+                      class="rounded-full border border-ink px-3.5 py-1 font-mono text-[0.82rem] text-ink no-underline transition-colors hover:bg-ink hover:text-canvas"
+                      href="${social.href}"
+                      ${social.href.startsWith("/") ? "" : raw('rel="me noopener"')}
+                      >${social.label === "RSS" ? "feed" : social.label}</a
+                    >`,
+                )}
+              </div>`
+            : ""}
+          ${isPlaceholder
+            ? html`<p class="mt-4 font-mono text-xs text-ink-faint">
+                <span class="text-accent" aria-hidden="true">←</span> that’s a placeholder portrait —
+                drop a real photo in <code class="text-ink-dim">public/</code> and point the config at it.
+              </p>`
+            : ""}
+        </div>
+      </div>
+    </section>`;
+}
+
+export function homePage(entries: EntrySummary[], site: Site): Html {
+  return html`${homeHero(site)}
+    ${entries.length > 0
+      ? html`<section>
+          <div class="mb-2 flex items-center gap-3">
+            <h2 class="font-serif text-[1.3rem] font-bold tracking-[-0.01em]">Recent writing</h2>
+            <span class="flex-1 border-b border-dashed border-line" aria-hidden="true"></span>
+          </div>
+          ${timeline(entries, html`Nothing published yet.`)}
+        </section>`
+      : html`<p class="py-12 text-center text-ink-dim">Nothing published yet.</p>`}`;
 }
 
 export function tagPage(tag: string, entries: EntrySummary[]): Html {
   return html`<section class="mb-4 border-b border-line pb-10">
-      <h1 class="mb-2.5 text-[1.9rem] font-bold leading-[1.2] tracking-[-0.025em]">
+      <h1 class="mb-2.5 font-serif text-[2rem] font-bold leading-[1.2] tracking-[-0.025em]">
         Tagged “${tag}”
       </h1>
       <p class="max-w-measure text-ink-dim">
@@ -139,7 +198,7 @@ export function entryPage(entry: Entry, recent: EntrySummary[]): Html {
             : html`<span class="${BADGE}">${entry.readingMinutes} min read</span>`}
           ${entry.author ? html`<span>${entry.author}</span>` : ""}
         </div>
-        <h1 class="mt-2 mb-3 text-[2rem] font-bold leading-[1.18] tracking-[-0.03em]">
+        <h1 class="mt-2 mb-3 font-serif text-[2.2rem] font-bold leading-[1.18] tracking-[-0.03em]">
           ${entry.title}
         </h1>
         ${entry.updated
@@ -212,7 +271,7 @@ export function aboutPage(site: Site): Html {
         height="96"
       />
       <div>
-        <h1 class="mb-1.5 text-[1.7rem] font-bold tracking-[-0.025em]">${author.name}</h1>
+        <h1 class="mb-1.5 font-serif text-[1.9rem] font-bold tracking-[-0.025em]">${author.name}</h1>
         <p class="text-[0.95rem] text-ink-dim">${author.tagline}</p>
         ${isPlaceholder
           ? html`<span

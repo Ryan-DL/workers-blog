@@ -12,16 +12,6 @@
   var root = document.documentElement;
   var STORAGE_KEY = "theme";
 
-  function stored() {
-    try {
-      var value = localStorage.getItem(STORAGE_KEY);
-      return value === "light" || value === "dark" ? value : null;
-    } catch (err) {
-      // Private browsing or blocked storage: fall back to per-page state.
-      return null;
-    }
-  }
-
   function apply(theme) {
     root.dataset.theme = theme;
     // A data attribute, not a class: the button's classes are Tailwind
@@ -47,13 +37,4 @@
     }
     apply(next);
   });
-
-  // Follow the OS while the visitor hasn't made a choice of their own. Once
-  // they have, their choice sticks and system changes are ignored.
-  var query = window.matchMedia("(prefers-color-scheme: light)");
-  var onSystemChange = function (event) {
-    if (!stored()) apply(event.matches ? "light" : "dark");
-  };
-  if (query.addEventListener) query.addEventListener("change", onSystemChange);
-  else if (query.addListener) query.addListener(onSystemChange);
 })();
