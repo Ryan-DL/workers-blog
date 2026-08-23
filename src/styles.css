@@ -36,23 +36,26 @@
  * These are real CSS custom properties, so `bg-canvas` compiles to
  * `background-color: var(--color-canvas)` and a theme flip is a variable swap
  * rather than a second copy of every rule under a `dark:` variant. The values
- * here are the DARK palette: dark is what you get by default, before any
- * JavaScript runs and if it never runs at all.
+ * here are the LIGHT palette: light is what the toggle lands on.
+ *
+ * DEFAULT IS DARK. The [data-theme="light"] block below is the only light
+ * override; the @media prefers-color-scheme block is intentionally absent so
+ * the site never auto-switches away from the dark design we chose.
  */
 @theme {
-  --color-canvas: #0c0f14;
-  --color-surface: #131820;
-  --color-sunken: #090b0f;
-  --color-ink: #e8ecf1;
-  --color-ink-dim: #96a1b0;
-  --color-ink-faint: #6b7684;
-  --color-line: #1f2731;
-  --color-line-strong: #2c3744;
-  --color-accent: #6cc7f5;
-  --color-accent-soft: #1a3a4d;
+  --color-canvas: #fbf9f5;
+  --color-surface: #ffffff;
+  --color-sunken: #f2efe8;
+  --color-ink: #ece8e1;
+  --color-ink-dim: #b6ad9f;
+  --color-ink-faint: #8a8278;
+  --color-line: #332d28;
+  --color-line-strong: #4a4239;
+  --color-accent: #2ff3b0;
+  --color-accent-soft: #0e5e50;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-sans: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   /* Body copy runs a shade larger than Tailwind's 16px default. */
   --text-body: 1.0625rem;
@@ -68,57 +71,43 @@
 }
 
 /*
- * The light palette, and the rule for when it applies.
- *
- * Two blocks, not three: outside the media query nothing has overridden the
- * dark defaults above, so only an explicit `light` needs handling. Inside it,
- * `:not([data-theme="dark"])` covers both "no choice stored" and "chose light"
- * while still letting someone who picked dark keep it on a light-mode OS.
- *
- * Worth knowing: browsers report `prefers-color-scheme: light` when the OS has
- * no preference set at all, so "unconfigured" and "prefers light" are the same
- * case here. Dark wins every other path. To make dark win even over an explicit
- * light preference, delete the @media block — the [data-theme] one is what the
- * toggle uses.
+ * The DARK palette — the default and the design we chose. `:root` is always
+ * dark; the [data-theme="light"] rule below flips to light on request. The
+ * warm off-white ink is intentionally free of blue or violet, and the only
+ * chromatic accent left is the mint tag/accent color.
  */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --color-canvas: #fdfdfc;
-    --color-surface: #ffffff;
-    --color-sunken: #f4f4f2;
-    --color-ink: #16191d;
-    --color-ink-dim: #56606c;
-    --color-ink-faint: #858e99;
-    --color-line: #e4e4e0;
-    --color-line-strong: #d0d0ca;
-    --color-accent: #0b6c99;
-    --color-accent-soft: #e2f1f9;
-    --shadow-card: 0 1px 2px rgb(16 20 26 / 0.05), 0 8px 24px -12px rgb(16 20 26 / 0.15);
-    color-scheme: light;
-  }
+:root {
+  --color-canvas: #0b0e1a;
+  --color-surface: #12173a;
+  --color-sunken: #070912;
+  --color-ink: #ece8e1;
+  --color-ink-dim: #b6ad9f;
+  --color-ink-faint: #8a8278;
+  --color-line: #3a332b;
+  --color-line-strong: #4a4239;
+  --color-accent: #2ff3b0;
+  --color-accent-soft: #0e5e50;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5), 0 8px 24px -12px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --color-canvas: #fdfdfc;
+  --color-canvas: #fbf9f5;
   --color-surface: #ffffff;
-  --color-sunken: #f4f4f2;
-  --color-ink: #16191d;
-  --color-ink-dim: #56606c;
-  --color-ink-faint: #858e99;
-  --color-line: #e4e4e0;
-  --color-line-strong: #d0d0ca;
-  --color-accent: #0b6c99;
-  --color-accent-soft: #e2f1f9;
+  --color-sunken: #f2efe8;
+  --color-ink: #2b2622;
+  --color-ink-dim: #5c5348;
+  --color-ink-faint: #8a8278;
+  --color-line: #e2dccf;
+  --color-line-strong: #c9c1b0;
+  --color-accent: #0b8f66;
+  --color-accent-soft: #d9f2e8;
   --shadow-card: 0 1px 2px rgb(16 20 26 / 0.05), 0 8px 24px -12px rgb(16 20 26 / 0.15);
   color-scheme: light;
 }
 
 @layer base {
-  :root {
-    color-scheme: dark;
-  }
-
-  /* So overscroll past the top or bottom of the page isn't a white flash. */
+  /* So overscroll past the top or bottom of the page isn't a flash. */
   html {
     background-color: var(--color-canvas);
   }
@@ -159,8 +148,6 @@
  * no JavaScript and therefore no [data-theme] attribute.
  *
  * Unlayered on purpose: this has to beat the plugin's own layered defaults.
- * Per-element shaping (the inline-code box) rides along as `prose-code:`
- * modifiers in src/views/pages.ts.
  */
 .prose {
   --tw-prose-body: var(--color-ink);
