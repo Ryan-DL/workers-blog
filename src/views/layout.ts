@@ -107,7 +107,7 @@ export function layout(meta: PageMeta, body: Html, site: Site): Html {
         <a
           class="mr-auto font-serif text-[1.05rem] font-bold tracking-tight text-ink no-underline"
           href="/"
-          ><span class="mr-1.5 text-accent" aria-hidden="true">▍</span>${site.title}</a
+          ><span class="mr-1.5 text-ink" aria-hidden="true">▍</span>${site.title}</a
         >
         <nav class="flex gap-4">
           ${site.nav.map(
