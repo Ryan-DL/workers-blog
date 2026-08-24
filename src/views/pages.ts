@@ -113,9 +113,6 @@ function homeHero(site: Site): Html {
           height="96"
         />
         <div class="min-w-0 flex-1">
-          <p class="font-mono text-xs font-semibold tracking-[0.14em] text-accent uppercase">
-            · Hey — I’m a human, not a brand
-          </p>
           <h1 class="mt-2 mb-2 font-serif text-[2.4rem] leading-[1.05] font-bold tracking-[-0.02em]">
             ${author.name}
           </h1>
