@@ -142,7 +142,7 @@ export function layout(meta: PageMeta, body: Html, site: Site): Html {
         </div>
         <p class="text-[0.8rem] text-ink-faint">
           © ${new Date().getFullYear()} ${site.title} ·
-          <a class="text-ink-dim" href="/feed.xml">RSS</a> ·
+          <a class="text-ink-dim" href="/feed.xml">RSS Feed</a> ·
           <a class="text-ink-dim" href="/docs">API</a>
         </p>
       </footer>

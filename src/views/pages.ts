@@ -128,7 +128,7 @@ function homeHero(site: Site): Html {
                       class="rounded-full border border-ink px-3.5 py-1 font-mono text-[0.82rem] text-ink no-underline transition-colors hover:bg-ink hover:text-canvas"
                       href="${social.href}"
                       ${social.href.startsWith("/") ? "" : raw('rel="me noopener"')}
-                      >${social.label === "RSS" ? "feed" : social.label}</a
+                      >${social.label === "RSS" ? "RSS Feed" : social.label}</a
                     >`,
                 )}
               </div>`
