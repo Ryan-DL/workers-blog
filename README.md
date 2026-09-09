@@ -210,8 +210,9 @@ domain, and no CORS.
 
 ### Deploying from CI
 
-`.github/workflows/ci.yml` runs typecheck and the test suite on every push/PR to
-`main`, then — on `main` only — `npm run deploy`.
+`.github/workflows/ci.yml` runs the test suite and typecheck on every push/PR to
+`main` — including the merge itself — then, on `main` only, `npm run deploy`.
+The deploy job waits on that check, so a red suite never reaches the edge.
 
 **A fork with no Cloudflare credentials still goes green.** Deploying is the
 only part of CI that needs an account, so when the secrets below are absent the
