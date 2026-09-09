@@ -1,30 +1,24 @@
 # blog
 
-A blog on Cloudflare Workers. Content is Markdown files in this repo, compiled
-into the Worker at build time — there is no database. The site is
-server-rendered by the Worker, and the same Worker exposes a read-only JSON API
-with an OpenAPI spec.
-
-Clone it, edit one config file, and deploy — nothing here is wired to a
-particular person or domain.
+A blog on Cloudflare Workers. Posts are Markdown files in this repo, compiled
+into the Worker at build time — no database. The Worker serves server-rendered
+pages and a read-only JSON API with an OpenAPI spec. Clone it, edit one config
+file, and deploy; nothing is wired to a particular person or domain.
 
 ## Make it yours
 
-Everything that isn't a post lives in **`blog.config.ts`** at the repo root —
-title, description, author, about-page copy, socials, and navigation. It's the
-only file you need to edit.
+Everything that isn't a post lives in **`blog.config.ts`** — title,
+description, author, about-page copy, socials, navigation. It's the only file
+you need to edit.
 
-Beyond that config, a fresh clone only wants:
+Beyond that, a fresh clone only wants:
 
-| | |
+| Thing | Note |
 | --- | --- |
 | `content/posts/*.md` | Delete the sample post and write your own |
-| `public/avatar.svg` | Replace with a real photo, and point `author.avatar` at it |
+| `public/avatar.svg` | Replace with a real photo; point `author.avatar` at it |
 | `name` in `wrangler.jsonc` | The Worker's name, and so its `*.workers.dev` hostname |
 | `routes` in `wrangler.jsonc` | Only if you have a domain — [see below](#using-your-own-domain) |
-
-The test suite reads `blog.config.ts` rather than hardcoding what it says, so
-filling it in with your own details doesn't turn the suite red.
 
 ```ts
 export default {
@@ -41,124 +35,70 @@ export default {
 } satisfies BlogConfig;
 ```
 
-**Socials take a handle or a full URL**, whichever you have. `github: "octocat"`
-becomes `https://github.com/octocat`; `github: "https://git.internal/me"` is used
-as-is. Mastodon handles split across their instance, and a leading `@` is fine
-anywhere.
+**Socials take a handle or a full URL**; a leading `@` is fine. **Anything blank
+is omitted**, so a half-filled config renders a clean footer. Built-ins: `github`,
+`x`, `bluesky`, `mastodon`, `linkedin`, `youtube`, `email`, `website`; anything
+else via `extraSocials`. `showRssLink: false` drops the feed icon. `npm run
+typecheck` catches a mistyped key.
 
-**Anything blank is omitted.** An empty string, whitespace, or a deleted line
-means that icon never renders — so a half-filled config produces a clean footer
-rather than links to profiles that don't exist. Blank the lot and the footer
-renders nothing at all. Set `showRssLink: false` to drop the feed icon too.
-
-Supported out of the box: `github`, `x`, `bluesky`, `mastodon`, `linkedin`,
-`youtube`, `email`, `website`. For anything else, use `extraSocials`:
-
-```ts
-extraSocials: [{ label: "Ko-fi", href: "https://ko-fi.com/you" }],
-```
-
-`npm run typecheck` catches a mistyped key.
-
-### About the `url` field
-
-Leave it empty and every absolute URL — canonical tags, the RSS feed, the
-sitemap, the OpenAPI server — is derived from the host serving the request. That
-is correct on `localhost`, on `*.workers.dev`, and on your real domain, with
-nothing to remember to change before deploying. Set it only to pin one canonical
-origin when the site answers on several hostnames.
+**`url`:** leave it empty and every absolute URL (canonical tags, RSS, sitemap,
+OpenAPI) is derived from the request host — correct on `localhost`,
+`*.workers.dev`, and your real domain with nothing to change before deploying.
+Set it only to pin one canonical origin when the site answers on several
+hostnames.
 
 ## The model
 
-The blog is one chronological timeline of **entries**, of two kinds:
+One chronological timeline of **entries**, of two kinds: `post` (written and
+hosted here, in `content/posts/*.md`) and `link` (published elsewhere, in
+`content/links/*.md`, with extra `url` and `site` fields). The front end
+branches on `kind`: a `post` renders as a permalink, a `link` as a card pointing
+offsite. Both share `slug`, `title`, `date`, `updated`, `status`, `tags`,
+`author`, `excerpt`, and a body (for a link the body is optional commentary).
 
-| `kind` | What it is | Lives in | Extra fields |
-| --- | --- | --- | --- |
-| `post` | Written and hosted here | `content/posts/*.md` | `readingMinutes` |
-| `link` | Published on another site | `content/links/*.md` | `url`, `site` |
+Every entry carries a `status`, which decides where it shows up:
 
-Every entry carries `kind`, so the front end branches on one field: render a
-`post` as a permalink to your own page, and a `link` as a card pointing offsite.
-Both kinds share `slug`, `title`, `date`, `updated`, `status`, `tags`,
-`author`, `excerpt`, and a body. For a link the body is *commentary* — a
-sentence or two about the piece — and may be empty; the real content is at
-`url`.
-
-## Publication status
-
-Every entry also carries a `status`, which decides where it shows up:
-
-| `status` | Listings, feeds, tags, sitemap | Fetchable at `/api/entries/:slug` |
+| status | Listings, feeds, tags, sitemap | Fetchable at `/api/entries/:slug` |
 | --- | --- | --- |
 | `published` (default) | yes | yes |
-| `preview` | **no** | **yes** |
+| `preview` | no | yes |
 | `draft` | no | no — 404 |
 
-`preview` is the state for "not published, but I want to look at it". The front
-end can render it exactly as it will appear once live, and you can send someone
-the link — but it appears in no list, feed, tag count, Recent list, or
-sitemap, so nobody stumbles onto it.
+`preview` is "not published, but I want to look at it" — renderable and
+shareable, but in no list or sitemap. **A preview is unlisted, not protected**:
+anyone who knows the slug can read it, so don't put anything sensitive in one.
 
-**A preview is unlisted, not protected.** Anyone who knows or guesses the slug
-can read it. The API sets `X-Robots-Tag: noindex, nofollow` and
-`Cache-Control: private, no-store` on preview responses, which keeps honest
-crawlers and shared caches away, but it is not access control. Don't put
-anything sensitive in one. (If you later want real protection, a token check on
-the detail route is the place to add it.)
+### Where data lives
 
-`status` comes back on every entry, and the site uses it: a preview page renders
-a "Preview" banner, carries `<meta name="robots" content="noindex, nofollow">`,
-and is left out of the sitemap.
+Your posts are just Markdown files under `content/`. When you build or deploy,
+`scripts/build-content.mjs` reads them, turns each into a page, and bakes the
+result into the Worker. That's why the blog needs no database and no runtime
+parsing — the posts *are* the site's code. (And if a file is malformed, the
+build fails loudly instead of a visitor hitting a broken page later.)
 
-## Where data lives
-
-| | Where | Changes |
-| --- | --- | --- |
-| Entry content | `content/**/*.md`, compiled into the Worker bundle | On deploy |
-
-The Worker holds no mutable state at all, which is why it needs no database and
-no bindings.
-
-`scripts/build-content.mjs` parses frontmatter and renders Markdown to HTML **at
-build time**, in Node, and writes `src/generated/entries.ts`. So `gray-matter`
-and `marked` never ship to the edge, cold starts don't parse anything, and a
-malformed entry fails the build instead of a request.
-
-The same compiler runs twice, over two directories:
-
-| Source | Output | Used by |
-| --- | --- | --- |
-| `content/` | `src/generated/` | The site — whatever you've actually written |
-| `test/fixtures/` | `test/generated/` | The tests — a fixed cast of entries |
-
-That split matters more than it looks. The tests are integration tests against a
-real Worker, and they assert on real numbers — `total` is 4, `posts` is 2, the
-`cloudflare` tag has 4 entries. Pointed at `content/`, **every post you publish
-would break the suite**, and the pressure would be to delete the assertions
-until nothing was checked. Pointed at `test/fixtures/`, the cast never changes:
-a draft, a preview, two hosted posts, and two external links, which between them
-exercise every rule in [Publication status](#publication-status).
-
-`vitest.config.ts` aliases the one import that decides which set is in play, so
-nothing in `src/` knows the difference.
+The same build step also feeds the test suite, but from a separate folder,
+`test/fixtures/`, filled with a small set of sample entries. Why separate? The
+tests check specific things (e.g. "there are 4 entries, 2 of them posts"), so
+if they ran against *your* `content/`, writing just one new post would break
+them. Running against the fixed sample set keeps the tests green no matter how
+many posts you add.
 
 ## Getting started
 
 ```bash
 npm install
-npm run build                  # content/ -> src/generated/, Tailwind -> public/styles.css
-npm run dev                    # http://localhost:8787
+npm run build   # content/ -> src/generated/, Tailwind -> public/styles.css
+npm run dev     # http://localhost:8787
 ```
 
-`npm run dev`, `deploy`, and `test` run `build` first, and `typecheck` runs
-`content:build`, so nothing generated is ever stale. While iterating on styles,
-run `npm run css:watch` next to `npm run dev` — the Worker restarts on its own
-when the source changes, but the stylesheet is compiled ahead of it.
+`dev`/`deploy`/`test` run `build` first. While iterating on styles, run
+`npm run css:watch` alongside `npm run dev`.
 
 ## Writing a post
 
 Drop a Markdown file in `content/posts/`. The filename sets the slug, with an
-optional `YYYY-MM-DD-` prefix stripped: `2026-01-15-hello-world.md` → `hello-world`.
+optional `YYYY-MM-DD-` prefix stripped: `2026-01-15-hello-world.md` →
+`hello-world`.
 
 ```markdown
 ---
@@ -175,282 +115,155 @@ updated: 2026-01-20      # optional
 Body goes here.
 ```
 
-`draft: true` and `preview: true` are shorthands for the matching `status`.
-Setting both, or setting a `status` that contradicts a shorthand, fails the
-build rather than picking a winner — guessing wrong there either leaks an
-unfinished post or hides a finished one.
+`draft: true` and `preview: true` are shorthands. Setting one that contradicts a
+`status` fails the build rather than picking a winner.
 
-## Linking to a post you wrote elsewhere
+### Linking to a post you wrote elsewhere
 
-Same idea, but in `content/links/` and with a required `url`:
+Same idea, but in `content/links/` with a **required** `url`:
 
 ```markdown
 ---
 title: What I got wrong about edge caching   # required
 date: 2026-02-20                             # required
-url: https://example.com/blog/the-post       # required — absolute http(s)
+url: https://example.com/blog/the-post        # required — absolute http(s)
 site: Example Engineering                    # optional — defaults to the URL host
 tags: [cloudflare]                           # optional
 ---
-
 Optional commentary, shown next to the link.
 ```
 
-`site` defaults to the hostname with `www.` stripped, so
-`https://www.example.org/x` gives `example.org`.
-
-The build fails, naming the file, on: a missing `title` or `date`, an
-unparseable date, a link with no `url` or a non-absolute one, an unknown or
-self-contradicting `status`, or a slug already used by another entry **of
-either kind**.
+The build fails, naming the file, on: a missing `title`/`date`, an unparseable
+date, a link with no or non-absolute `url`, an unknown or self-contradicting
+`status`, or a slug already used by another entry **of either kind**.
 
 ## API
 
 Everything returns `entries` — a mixed list unless you narrow it by kind.
 
-| Method | Route | Notes |
-| --- | --- | --- |
-| GET | `/api` | Endpoint index |
-| GET | `/api/health` | `{ ok, entries, posts, links, byStatus, timestamp }` |
-| GET | `/api/entries` | The timeline. `?kind=&tag=&q=&limit=&offset=` |
-| GET | `/api/posts` | Alias for `?kind=post` |
-| GET | `/api/links` | Alias for `?kind=link` |
-| GET | `/api/entries/:slug` | Full entry incl. `markdown` and `html` |
-| GET | `/api/tags` | Tags with counts across both kinds, most-used first |
-| GET | `/feed.xml` | RSS 2.0 over the whole timeline |
-| GET | `/sitemap.xml` | Hosted posts only |
-| GET | `/openapi.json` | OpenAPI 3.1 document; rendered at `/docs` |
+| Route | Notes |
+| --- | --- |
+| `/api`, `/api/health` | Index; health with counts |
+| `/api/entries` | The timeline. `?kind=&tag=&q=&limit=&offset=` (`kind` = `post`\|`link`\|`all`) |
+| `/api/posts`, `/api/links` | Aliases for `?kind=post` / `?kind=link` |
+| `/api/entries/:slug` | Full entry incl. `markdown` and `html` |
+| `/api/tags` | Tags with counts, most-used first |
+| `/feed.xml` | RSS 2.0 over the timeline |
+| `/sitemap.xml` | Hosted posts only |
+| `/openapi.json` | OpenAPI 3.1 document; rendered at `/docs` |
 
-Behaviour worth knowing:
-
-- `kind` accepts `post`, `link`, or `all`. Anything else is a **400** — silently
-  returning links to someone who asked for `kind=posts` would be a wrong answer,
-  not a degraded one. Malformed *pagination* params do fall back to defaults.
-- `limit` caps at 100.
-- Drafts 404 everywhere. Previews 404 from nothing but appear in no listing —
-  see [Publication status](#publication-status).
-- In RSS, a link item's `<link>` points at the external URL, while its `<guid>`
-  stays on your domain so readers keep a stable identity for the item.
-- The sitemap lists only hosted posts — `renderSitemap` takes `Post[]`, not
-  `Entry[]`, so including an external URL is a compile error.
+Drafts 404 everywhere; previews appear in no listing. `limit` caps at 100; a
+bad `kind` is a 400 while bad pagination falls back to defaults.
 
 ## The site
 
-Pages are server-rendered by the Worker — the entries are already compiled into
-the bundle, so rendering one is a lookup and a template. Nothing to fetch, no
-hydration, no loading state.
+Pages are server-rendered by the Worker — the entries are already in the bundle,
+so rendering is a lookup and a template. No fetching, hydration, or loading
+state. Routes: `/` (timeline), `/about`, `/posts/:slug`, `/tags/:tag`, `/docs`.
 
-| Route | |
-| --- | --- |
-| `/` | The timeline, posts and links together |
-| `/about` | Author, portrait, bio, socials |
-| `/posts/:slug` | A post, or a link with a callout to its source |
-| `/tags/:tag` | Everything under one tag |
-| `/docs` | Swagger UI over the API |
+### Styling & theme
 
-### Styling
+**Tailwind CSS v4.** `src/styles.css` is the entry point; `css:build` compiles
+it to `public/styles.css` (gitignored — edit the source, never the file in
+`public/`). Most of the design lives as utility classes in `src/views/*.ts`;
+`src/styles.css` holds the parts utilities can't express: the `@theme` tokens
+(palette, fonts, widths), the light-palette blocks, a base layer for link/focus
+defaults, and `.prose` variables for rendered Markdown.
 
-**Tailwind CSS v4.** `src/styles.css` is the entry point and `npm run css:build`
-compiles it to `public/styles.css`, which is what the pages link. The output is
-generated and gitignored — edit the source, never the file in `public/`.
+Colours are **semantic** — `bg-canvas`, `text-ink-dim`, `text-accent` each
+compile to a `--color-*` variable, so switching theme swaps variables rather
+than duplicating rules under `dark:` (that's also why rendered Markdown needs no
+`dark:prose-invert`). Tailwind scans `src/**/*.ts` for class names and emits only
+what it finds; `src/generated/` is excluded so prose words like "block" don't
+generate stray CSS.
 
-Almost all of the design lives as utility classes in `src/views/*.ts`. What's
-left in `src/styles.css` is the part utilities can't express:
-
-| | Why it's CSS and not a class |
-| --- | --- |
-| `@theme` tokens | The palette, fonts, and page widths every utility is built from |
-| The light-palette blocks | Which theme is in effect isn't a property of any one element |
-| A base layer | Link and focus-ring defaults, so a link written mid-sentence is legible without anyone remembering a class |
-| `.prose` variables | Post bodies are HTML from `marked`; there's no markup to hang a class on |
-
-Colours are **semantic, not literal** — `bg-canvas`, `text-ink-dim`,
-`border-line`, `text-accent`. Each compiles to `var(--color-…)`, so switching
-theme swaps ten variables rather than duplicating every rule under a `dark:`
-variant. That is also why rendered Markdown doesn't need `dark:prose-invert`,
-which would break for a visitor with no JavaScript.
-
-Tailwind scans `src/**/*.ts` for class names — including inside the `html`
-template literals — and emits only what it finds. `src/generated/` is excluded
-on purpose: it's rendered Markdown, and prose full of words like "block",
-"table", and "hidden" would otherwise generate CSS nobody asked for.
-
-### Theme
-
-Dark by default, with a toggle in the header. Precedence is: the visitor's
-stored choice, then `prefers-color-scheme`, then **dark**. The initial theme is
-resolved by a small inline script in `<head>` so there's no flash of the wrong
-palette before the page paints; `public/theme.js` only handles the toggle
-afterwards.
-
-That script sets `data-theme` on `<html>`, and `src/styles.css` declares
-`dark:` and `light:` as custom variants keyed off that attribute rather than off
-`prefers-color-scheme`. It has to work that way: an explicit choice by the
-visitor must be able to beat the OS, and a media query can't be overridden by
-one.
-
-One nuance worth knowing: browsers report `prefers-color-scheme: light` when the
-OS has no preference set at all, so "no configuration" is indistinguishable from
-"prefers light" in CSS. Dark is the fallback for every other path — no
-JavaScript, an unsupported browser, a thrown error. To make dark win even over
-an explicit light preference, drop the `@media (prefers-color-scheme: light)`
-block in `src/styles.css` and the `matchMedia` call in the bootstrap.
-
-### Hooks
-
-Anything JavaScript or a test needs to find uses a `data-` attribute —
-`data-theme-toggle`, `data-socials`, `data-recent`. Utility
-classes describe how something looks and change whenever it's restyled, so
-they're the wrong thing to query or assert on.
+**Dark by default**, with a header toggle. Precedence: stored choice →
+`prefers-color-scheme` → **dark**. A tiny inline script in `<head>` resolves the
+initial theme (no flash) and sets `data-theme` on `<html>`, which `dark:`/`light:`
+variants key off so an explicit choice beats the OS. It's handled this way
+because a media query can't be overridden by one. Anything the JS or tests need
+to find uses a `data-` attribute (`data-theme-toggle`, `data-socials`) rather
+than a restylable utility class.
 
 ## Going live
 
-Deploying needs a Cloudflare account and nothing else — there are no bindings
-to provision:
+You need a Cloudflare account and nothing else — there are no bindings to
+provision:
 
 ```bash
-wrangler login                       # interactive — run this yourself
+wrangler login   # interactive — run this yourself
 npm run deploy
 ```
 
-That publishes to `blog.<your-subdomain>.workers.dev`, which is enough to have a
-real site on the internet without owning a domain. Rename the Worker by changing
-`name` in `wrangler.jsonc`; point it at a domain you own with
-[the `routes` entry](#using-your-own-domain).
-
-Static files are served by Workers Static Assets from `public/` — the same
-Worker serves the site, the assets, and the API, so there's one deploy, one
-domain, and no CORS between the front end and the API.
+That publishes to `blog.<your-subdomain>.workers.dev` — a real site with no
+domain of your own. Static files are served from `public/` by Workers Static
+Assets; one Worker serves the site, assets, and API, so there's one deploy, one
+domain, and no CORS.
 
 ### Deploying from CI
 
-`.github/workflows/ci.yml` runs on every push and pull request to `main`:
-typecheck, then the test suite, and — on `main` only — `npm run deploy`. A red
-suite blocks the deploy, so **pushing to `main` is publishing**, and a broken
-build stops before it reaches the edge.
-
-CI runs the same `npm run deploy` you would run locally rather than a
-marketplace action, so there is one deploy path to reason about instead of two.
-
-It needs two repository secrets:
+`.github/workflows/ci.yml` runs typecheck and the test suite on every push/PR to
+`main`, then — on `main` only — `npm run deploy`. **Pushing to `main` is
+publishing**, and a red suite blocks a broken build before it reaches the edge.
+Set two repo secrets first:
 
 | Secret | What |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | An API token with **Edit Cloudflare Workers** permission |
+| `CLOUDFLARE_API_TOKEN` | Token with **Edit Cloudflare Workers** permission |
 | `CLOUDFLARE_ACCOUNT_ID` | The account the Worker lives in |
 
 Create the token at **Cloudflare dashboard → My Profile → API Tokens → Create
-Token → Edit Cloudflare Workers**, then:
-
-```bash
-gh secret set CLOUDFLARE_API_TOKEN     # paste when prompted; never commit it
-```
-
-Deploying by hand still works and needs neither secret — `wrangler login` uses
-your own OAuth session.
+Token → Edit Cloudflare Workers**, then `gh secret set CLOUDFLARE_API_TOKEN`.
+Deploying by hand needs neither secret — `wrangler login` uses your OAuth.
 
 ### Pull request previews
 
-Every pull request gets its own running copy of the site. CI runs `wrangler
-versions upload --preview-alias pr-<number>`, which **uploads a version without
-deploying it** — production keeps serving `main` — and comments the URL on the
-PR:
+Every pull request gets its own live preview. When you open a PR, CI uploads a
+preview of your branch — without touching the deployed site — and posts a link
+on the PR:
 
 ```
-https://pr-42-blog.<subdomain>.workers.dev
+https://pr-<number>-blog.<subdomain>.workers.dev
 ```
 
-The alias makes that hostname stable for the life of the PR, so the link keeps
-working as commits land rather than changing on every push. The comment is
-edited in place instead of a new one per commit.
+The link works for the whole life of the PR and updates as you push commits, so
+you (and reviewers) can see exactly what the change will look like before it
+ships. A quick checklist:
 
-This needs `"preview_urls": true` in `wrangler.jsonc`. The setting defaults to
-the value of `workers_dev`, so it is redundant while the site is on
-workers.dev — it is written out because adding a custom domain turns
-`workers_dev` off, which would silently take previews with it.
+- **It never replaces the live site.** Production keeps serving `main`;
+  previews are just versions uploaded *next to* it.
+- **Previews live on `*.workers.dev` only** — Cloudflare won't serve them from a
+  custom domain.
+- **They're public.** Nothing links to them, but treat them as unlisted, not
+  private.
+- **No logs.** Workers Logs and `wrangler tail` don't cover preview URLs.
 
-Three things to know:
-
-- **Previews only live on `*.workers.dev`.** Cloudflare will not serve them
-  from a custom domain, so there is no `preview.your-domain.com` even once the
-  site has moved.
-- **They're public, and they self-canonicalise.** Because `url` is empty, a
-  preview's canonical tag points at its own workers.dev host. Nothing links to
-  it, but it is not private.
-- **No logs.** Workers Logs, `wrangler tail`, and Logpush don't cover preview
-  URLs.
-
-Previews are simple here only because the Worker has no bindings. A Worker with
-a database needs a separate preview one, or every PR writes to production.
+Previews need `"preview_urls": true` in `wrangler.jsonc`.
 
 ### Using your own domain
 
-Out of the box the site is served from `*.workers.dev`, so a fresh clone deploys
-and is live without owning anything. To move it to a domain you own, add a
-`routes` entry to `wrangler.jsonc` and drop `workers_dev`:
+Add a `routes` entry to `wrangler.jsonc` and drop `workers_dev`:
 
 ```jsonc
 "routes": [{ "pattern": "example.com", "custom_domain": true }]
 ```
 
 `custom_domain: true` hands Cloudflare the whole hostname — it creates the DNS
-record and issues the certificate on deploy, and every path routes to this
-Worker. The zone has to already be on the same Cloudflare account; `wrangler
-deploy` fails rather than registering one for you. Expect a few minutes between
-the first deploy and the certificate going live.
-
-Two consequences worth knowing:
-
-- **`workers.dev` goes off with it.** Once a Wrangler file has `routes` and no
-  explicit `workers_dev`, the `*.workers.dev` hostname is disabled. That's the
-  right default — a second origin serving the same pages would compete with the
-  real domain for canonical URLs. Keep `"workers_dev": true` to have both, and
-  keep `"preview_urls": true` either way (see above).
-- **Only the apex is claimed.** `www.example.com` would resolve to nothing. To
-  redirect it, add a Cloudflare Redirect Rule in the dashboard; adding it as a
-  second custom domain would serve the site at both hostnames instead, which is
-  usually not what you want.
-
-Because `url` in `blog.config.ts` is empty, canonical tags, the RSS feed, the
-sitemap, and the OpenAPI server all follow the hostname of the request — so
-none of them need changing when the domain is added.
-
-## Layout
-
-```
-blog.config.ts            everything about the site that isn't a post
-content/posts/*.md        posts hosted here
-content/links/*.md        links to posts published elsewhere
-scripts/build-content.mjs build-time Markdown -> a generated entries module
-src/index.ts              Hono app: pages, API, feeds
-src/config.ts             config types, social registry, resolution
-src/content.ts            queries over the compiled entries
-src/feed.ts               RSS + sitemap
-src/openapi.ts            the OpenAPI document
-src/views/                HTML templates, styled with Tailwind utilities
-src/styles.css            Tailwind entry: design tokens, theme rule, prose
-public/                   theme.js, avatar.svg, favicon.svg (+ compiled styles.css)
-test/                     integration tests against a real Worker
-test/fixtures/            the entries those tests run against, not the site's
-```
-
-`src/generated/`, `test/generated/`, and `public/styles.css` are gitignored —
-all three are wiped and rebuilt from source.
-
-CORS on `/api/*` is `origin: "*"`, which only affects other people's clients
-reading your API — the site itself is same-origin. Narrow it if you'd rather
-nobody else consumed it.
+record and issues the certificate on deploy (zone must already be on your
+account). Expect a few minutes before the cert goes live. Two consequences:
+once `routes` is set, the `*.workers.dev` hostname turns off (keep
+`"workers_dev": true` to have both), and only the apex is claimed — redirect
+`www` with a Cloudflare Redirect Rule rather than a second custom domain.
+Because `url` is empty, canonical/RSS/sitemap/OpenAPI all follow the request
+host, so nothing changes when the domain is added.
 
 ## Commands
 
 ```bash
 npm run dev          # local server
 npm run build        # content -> src/generated, Tailwind -> public/styles.css
-npm run fixtures:build  # test/fixtures -> test/generated (test entries only)
-npm run css:watch    # recompile the stylesheet on change, alongside dev
 npm test             # vitest against real workerd
 npm run typecheck    # tsc over src and test
-npm run cf-typegen   # regenerate worker-configuration.d.ts after config changes
 npm run deploy
 ```
 
