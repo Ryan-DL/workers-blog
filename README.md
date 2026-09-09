@@ -218,12 +218,27 @@ Deploying by hand needs neither secret — `wrangler login` uses your OAuth.
 
 ### Pull request previews
 
-Every PR gets its own running copy. CI runs `wrangler versions upload
---preview-alias pr-<number>` — **uploads a version without deploying it** — and
-comments `https://pr-<number>-blog.<subdomain>.workers.dev` on the PR. Three
-things to know: previews only live on `*.workers.dev` (not a custom domain),
-they're public but self-canonicalise, and Logs/Logpush don't cover their URLs.
-This needs `"preview_urls": true` in `wrangler.jsonc`.
+Every pull request gets its own live preview. When you open a PR, CI uploads a
+preview of your branch — without touching the deployed site — and posts a link
+on the PR:
+
+```
+https://pr-<number>-blog.<subdomain>.workers.dev
+```
+
+The link works for the whole life of the PR and updates as you push commits, so
+you (and reviewers) can see exactly what the change will look like before it
+ships. A quick checklist:
+
+- **It never replaces the live site.** Production keeps serving `main`;
+  previews are just versions uploaded *next to* it.
+- **Previews live on `*.workers.dev` only** — Cloudflare won't serve them from a
+  custom domain.
+- **They're public.** Nothing links to them, but treat them as unlisted, not
+  private.
+- **No logs.** Workers Logs and `wrangler tail` don't cover preview URLs.
+
+Previews need `"preview_urls": true` in `wrangler.jsonc`.
 
 ### Using your own domain
 
