@@ -211,9 +211,17 @@ domain, and no CORS.
 ### Deploying from CI
 
 `.github/workflows/ci.yml` runs typecheck and the test suite on every push/PR to
-`main`, then — on `main` only — `npm run deploy`. **Pushing to `main` is
-publishing**, and a red suite blocks a broken build before it reaches the edge.
-Set two repo secrets first:
+`main`, then — on `main` only — `npm run deploy`.
+
+**A fork with no Cloudflare credentials still goes green.** Deploying is the
+only part of CI that needs an account, so when the secrets below are absent the
+deploy step is skipped and the run explains what to set, rather than failing.
+Fork this repo, push, and you get a passing build having configured nothing.
+
+Setting the secrets turns that off: from then on **pushing to `main` is
+publishing**, a red suite blocks a broken build before it reaches the edge, and
+a deploy that actually fails fails the run. Skipping only ever covers the
+unconfigured case — it is never a way for a broken deploy to look healthy.
 
 | Secret | What |
 | --- | --- |
@@ -221,8 +229,18 @@ Set two repo secrets first:
 | `CLOUDFLARE_ACCOUNT_ID` | The account the Worker lives in |
 
 Create the token at **Cloudflare dashboard → My Profile → API Tokens → Create
-Token → Edit Cloudflare Workers**, then `gh secret set CLOUDFLARE_API_TOKEN`.
-Deploying by hand needs neither secret — `wrangler login` uses your OAuth.
+Token → Edit Cloudflare Workers**; the account ID is on the **Workers & Pages**
+overview page. Then:
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN
+gh secret set CLOUDFLARE_ACCOUNT_ID
+```
+
+**You may not need either.** If you used the Deploy to Cloudflare button,
+Cloudflare already redeploys on every push through Workers Builds, and these
+secrets would add a second, independent deploy path. Deploying by hand needs
+neither — `wrangler login` uses your own OAuth credentials.
 
 ### Pull request previews
 
@@ -246,7 +264,9 @@ ships. A quick checklist:
   private.
 - **No logs.** Workers Logs and `wrangler tail` don't cover preview URLs.
 
-Previews need `"preview_urls": true` in `wrangler.jsonc`.
+Previews need `"preview_urls": true` in `wrangler.jsonc`, plus the two secrets
+above — without them a pull request simply goes without a preview, and CI stays
+green.
 
 ### Using your own domain
 

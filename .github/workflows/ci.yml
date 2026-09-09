@@ -53,13 +53,86 @@ jobs:
 
       - run: npm ci
 
-      # `npm run deploy` is the same command used locally, run through the
-      # repo's own pinned wrangler — production and a local deploy stay on one
-      # code path.
-      - run: npm run deploy
+      # A fork with no Cloudflare credentials is the ordinary case, not a
+      # broken one — most people land here by forking to read the code, and a
+      # repo that greets them with a red X teaches them to ignore CI. So the
+      # absence of credentials is reported and skipped; only a deploy that was
+      # actually attempted and failed turns the run red.
+      #
+      # This has to be a step rather than a job-level `if:`, because the
+      # `secrets` context is not available in one.
+      - id: credentials
+        name: Check for Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing="CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="${missing:+$missing, }CLOUDFLARE_ACCOUNT_ID"
+
+          if [ -z "$missing" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "missing=$missing" >> "$GITHUB_OUTPUT"
+          fi
+
+      # `npm run deploy` is the same command used locally, run through the
+      # repo's own pinned wrangler — production and a local deploy stay on one
+      # code path.
+      - name: Deploy
+        if: steps.credentials.outputs.configured == 'true'
+        run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Explain how to enable deploys
+        if: steps.credentials.outputs.configured != 'true'
+        env:
+          MISSING: ${{ steps.credentials.outputs.missing }}
+        run: |
+          echo "::notice title=Deploy skipped::Not configured for this repository (missing: $MISSING). See the job summary for setup steps."
+
+          # A heredoc quoted at the marker so backticks and $ in the prose
+          # survive verbatim; the one dynamic line is appended separately.
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Deploy skipped
+
+          Typecheck and the test suite ran normally — this run is green, and
+          nothing is wrong. There is just nowhere to deploy to yet, because
+          this repository has no Cloudflare credentials configured.
+
+          **If you forked this to read the code, you can stop here.**
+
+          EOF
+          echo "Missing repository secret(s): \`$MISSING\`" >> "$GITHUB_STEP_SUMMARY"
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+
+          ### To deploy from CI
+
+          1. Create a token at **Cloudflare dashboard -> My Profile -> API
+             Tokens -> Create Token -> Edit Cloudflare Workers**.
+          2. Find your account ID on the **Workers & Pages** overview page.
+          3. Add both as repository secrets:
+
+          ```bash
+          gh secret set CLOUDFLARE_API_TOKEN
+          gh secret set CLOUDFLARE_ACCOUNT_ID
+          ```
+
+          The next push to `main` will deploy, and pull requests will get
+          preview URLs. From then on a failed deploy *does* fail the build —
+          skipping is only ever for the unconfigured case.
+
+          ### You may not need this
+
+          If you used the **Deploy to Cloudflare** button, Cloudflare already
+          redeploys on every push through Workers Builds. Setting these secrets
+          adds a second, independent deploy path. Deploying by hand needs
+          neither secret — `wrangler login` uses your own OAuth credentials.
+          EOF
 
   preview:
     name: Preview
@@ -84,9 +157,25 @@ jobs:
 
       - run: npm ci
 
+      # Same reasoning as the deploy job: an unconfigured repo is skipped with
+      # a note, not failed. Without credentials there is no preview to post,
+      # and the pull request simply goes without one.
+      - id: credentials
+        name: Check for Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # `versions upload` only uploads the Worker, so content and CSS have to
       # be compiled first — `npm run deploy` normally does this for us.
       - run: npm run build
+        if: steps.credentials.outputs.configured == 'true'
 
       # Uploads a version WITHOUT deploying it: production keeps serving
       # whatever is on main. `--preview-alias` makes the hostname stable for
@@ -97,6 +186,7 @@ jobs:
       # its `deployment-url` output — the alternative is scraping the URL out
       # of wrangler's stdout, which breaks whenever that output is reworded.
       - id: upload
+        if: steps.credentials.outputs.configured == 'true'
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -106,6 +196,7 @@ jobs:
       # One comment per PR, edited in place. `--edit-last` fails when there is
       # nothing to edit, so the first run falls through to posting.
       - name: Comment the preview URL
+        if: steps.credentials.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.number }}
@@ -116,3 +207,8 @@ jobs:
             "$URL" "${SHA:0:7}")
           gh pr comment "$PR" --edit-last --body "$body" \
             || gh pr comment "$PR" --body "$body"
+
+      - name: Note that previews are not configured
+        if: steps.credentials.outputs.configured != 'true'
+        run: |
+          echo "::notice title=Preview skipped::No Cloudflare credentials configured, so this pull request gets no preview URL. See the deploy job summary on main for setup steps."
