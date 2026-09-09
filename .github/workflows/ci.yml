@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   verify:
-    name: Typecheck and test
+    name: Test and Typecheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
