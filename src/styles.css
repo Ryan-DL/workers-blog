@@ -77,9 +77,9 @@
  * chromatic accent is the warm amber accent color.
  */
 :root {
-  --color-canvas: #0b0e1a;
-  --color-surface: #12173a;
-  --color-sunken: #070912;
+  --color-canvas: #1a1a1a;
+  --color-surface: #242424;
+  --color-sunken: #141414;
   --color-ink: #ece8e1;
   --color-ink-dim: #b6ad9f;
   --color-ink-faint: #8a8278;
