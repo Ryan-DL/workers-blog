@@ -70,16 +70,18 @@ anyone who knows the slug can read it, so don't put anything sensitive in one.
 
 ### Where data lives
 
-Entries live in `content/**/*.md`, compiled into the Worker bundle on deploy.
-`scripts/build-content.mjs` parses frontmatter and renders Markdown to HTML **at
-build time**, writing `src/generated/entries.ts` — so `gray-matter`/`marked`
-never ship to the edge, and a malformed entry fails the build instead of a
-request.
+Your posts are just Markdown files under `content/`. When you build or deploy,
+`scripts/build-content.mjs` reads them, turns each into a page, and bakes the
+result into the Worker. That's why the blog needs no database and no runtime
+parsing — the posts *are* the site's code. (And if a file is malformed, the
+build fails loudly instead of a visitor hitting a broken page later.)
 
-The same compiler runs twice: over `content/` (the site) and over
-`test/fixtures/` (a fixed cast for the tests). The tests assert on real numbers
-(total is 4, posts is 2), so pointing them at `content/` would break on every
-post you publish; pointing them at the fixed fixtures keeps the suite stable.
+The same build step also feeds the test suite, but from a separate folder,
+`test/fixtures/`, filled with a small set of sample entries. Why separate? The
+tests check specific things (e.g. "there are 4 entries, 2 of them posts"), so
+if they ran against *your* `content/`, writing just one new post would break
+them. Running against the fixed sample set keeps the tests green no matter how
+many posts you add.
 
 ## Getting started
 
