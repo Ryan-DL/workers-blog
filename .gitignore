@@ -11,3 +11,6 @@ test/generated/
 
 # Compiled by Tailwind from src/styles.css — edit that, not this
 public/styles.css
+
+# Throwaway content trees written by test/build/build-content.spec.ts
+test/.tmp/
