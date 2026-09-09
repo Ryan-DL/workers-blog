@@ -5,6 +5,14 @@ into the Worker at build time — no database. The Worker serves server-rendered
 pages and a read-only JSON API with an OpenAPI spec. Clone it, edit one config
 file, and deploy; nothing is wired to a particular person or domain.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Ryan-DL/workers-blog)
+
+Click the button to spin up a copy of this blog inside your own Cloudflare and
+GitHub accounts — it clones the repo, creates the Worker, and wires up Workers
+Builds so future pushes redeploy automatically. The repo comes with placeholder
+identity on purpose, so your first deploy "just works"; edit `blog.config.ts`
+and push to make it yours.
+
 ## Make it yours
 
 Everything that isn't a post lives in **`blog.config.ts`** — title,
